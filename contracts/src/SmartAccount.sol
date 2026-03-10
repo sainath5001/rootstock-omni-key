@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title SmartAccount
@@ -17,7 +18,7 @@ import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.s
  *      from a Bitcoin key to this address.
  */
 contract SmartAccount {
-    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     /// @notice Address that corresponds to the owner's Bitcoin public key.
     address public immutable owner;
@@ -70,7 +71,7 @@ contract SmartAccount {
         // Use Ethereum-style signed message prefix for additional protection.
         bytes32 ethSignedHash = payloadHash.toEthSignedMessageHash();
 
-        address recovered = ethSignedHash.recover(signature);
+        address recovered = ECDSA.recoverCalldata(ethSignedHash, signature);
         if (recovered != owner) {
             revert InvalidSignature();
         }
