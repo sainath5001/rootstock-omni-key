@@ -5,6 +5,8 @@
 export interface UnisatProvider {
   requestAccounts(): Promise<string[]>;
   getAccounts(): Promise<string[]>;
+  /** Public key (hex) for the current account – used to derive SmartAccount owner address. */
+  getPublicKey?: () => Promise<string>;
   signMessage(message: string): Promise<string>;
   switchNetwork?(network: string): Promise<void>;
 }

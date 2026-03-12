@@ -11,17 +11,19 @@ import {MessageHashUtils} from "openzeppelin-contracts/contracts/utils/cryptogra
  *         protects against replay with a monotonically increasing nonce,
  *         and performs a call to a target contract if verification succeeds.
  *
- * @dev This contract assumes all signatures are standard ECDSA signatures
- *      that can be recovered via `ecrecover` / OpenZeppelin `ECDSA`.
- *      The owner is an Ethereum-address representation of the controlling
- *      Bitcoin public key. Off-chain logic must ensure correct mapping
- *      from a Bitcoin key to this address.
+ * @dev Supports two entry points:
+ *      - verifyAndExecute: Ethereum personal_sign style (hash prefixed with \\x19Ethereum Signed Message).
+ *      - executeByRelayer: Relayer-only; use when the user signs with Bitcoin-style (e.g. Unisat).
+ *        The relayer must verify the Bitcoin signature off-chain and only call this when it matches owner.
  */
 contract SmartAccount {
     using MessageHashUtils for bytes32;
 
     /// @notice Address that corresponds to the owner's Bitcoin public key.
     address public immutable owner;
+
+    /// @notice Relayer allowed to call executeByRelayer (optional; 0 = disabled).
+    address public immutable relayer;
 
     /// @notice Nonce used to prevent replay of signed messages.
     uint256 public nonce;
@@ -38,9 +40,10 @@ contract SmartAccount {
     error InvalidNonce(uint256 expected, uint256 provided);
     error CallFailed(bytes returndata);
 
-    constructor(address _owner) {
+    constructor(address _owner, address _relayer) {
         require(_owner != address(0), "owner zero");
         owner = _owner;
+        relayer = _relayer;
     }
 
     /**
@@ -84,6 +87,29 @@ contract SmartAccount {
             revert CallFailed(result);
         }
 
+        emit Executed(owner, target, _nonce, data, result);
+        return result;
+    }
+
+    /**
+     * @notice Execute a call via the trusted relayer (for Bitcoin-style signers e.g. Unisat).
+     * @dev Only callable by the relayer. The relayer must verify the user's Bitcoin signature
+     *      off-chain and confirm the signer matches owner before calling.
+     */
+    function executeByRelayer(
+        uint256 _nonce,
+        address target,
+        bytes calldata data
+    ) external returns (bytes memory) {
+        require(relayer != address(0) && msg.sender == relayer, "not relayer");
+        if (_nonce != nonce) {
+            revert InvalidNonce(nonce, _nonce);
+        }
+        nonce = _nonce + 1;
+        (bool success, bytes memory result) = target.call(data);
+        if (!success) {
+            revert CallFailed(result);
+        }
         emit Executed(owner, target, _nonce, data, result);
         return result;
     }

@@ -45,3 +45,24 @@ export async function getAddress(): Promise<string> {
   }
   return accounts[0];
 }
+
+/**
+ * Returns the Ethereum address that corresponds to the Unisat key (owner for SmartAccount).
+ * Uses getPublicKey() from Unisat and derives address via secp256k1 → keccak256.
+ * Fails if Unisat does not expose getPublicKey.
+ */
+export async function getOwnerAddress(): Promise<string> {
+  const unisat = getUnisat();
+  if (!unisat.getPublicKey) {
+    throw new Error(
+      "Unisat getPublicKey not available. Your SmartAccount must be deployed with the owner address that recovers from your Unisat signatures."
+    );
+  }
+  const pubKeyHex = await unisat.getPublicKey();
+  if (!pubKeyHex || typeof pubKeyHex !== "string") {
+    throw new Error("Unisat getPublicKey did not return a string");
+  }
+  const hex = pubKeyHex.startsWith("0x") ? pubKeyHex : "0x" + pubKeyHex;
+  const { ethers } = await import("ethers");
+  return ethers.computeAddress(hex);
+}

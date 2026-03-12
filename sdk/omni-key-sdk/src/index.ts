@@ -1,4 +1,4 @@
-import { connectWallet as connectWalletFn, detectUnisat, getAddress } from "./wallet";
+import { connectWallet as connectWalletFn, detectUnisat, getAddress, getOwnerAddress } from "./wallet";
 import {
   getMessageToSign,
   signMessage as signMessageFn,
@@ -7,7 +7,7 @@ import {
 import type { OmniKeyClientConfig, SignAndRelayParams, RelayPayload, RelayResponse } from "./types";
 
 export type { OmniKeyClientConfig, SignAndRelayParams, RelayPayload, RelayResponse, UnisatProvider } from "./types";
-export { detectUnisat, getAddress } from "./wallet";
+export { detectUnisat, getAddress, getOwnerAddress } from "./wallet";
 export { buildPayloadHash, getMessageToSign } from "./signer";
 export { connectWalletFn as connectWallet, signMessageFn as signMessage, relayTransactionFn as relayTransaction };
 
@@ -42,6 +42,14 @@ export class OmniKeyClient {
    */
   async getAddress(): Promise<string> {
     return getAddress();
+  }
+
+  /**
+   * Returns the Ethereum address that should be the SmartAccount owner (derived from Unisat public key).
+   * Use this when deploying SmartAccount so the contract accepts your Unisat signatures.
+   */
+  async getOwnerAddress(): Promise<string> {
+    return getOwnerAddress();
   }
 
   /**

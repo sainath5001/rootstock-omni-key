@@ -12,7 +12,7 @@ contract SmartAccountTest is Test {
 
     function setUp() public {
         owner = vm.addr(1);
-        smartAccount = new SmartAccount(owner);
+        smartAccount = new SmartAccount(owner, address(0));
         counter = new Counter();
     }
 

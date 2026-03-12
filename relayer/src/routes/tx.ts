@@ -11,6 +11,26 @@ function isHex(s: string): boolean {
   return /^[0-9a-fA-F]*$/.test(trimmed) && trimmed.length % 2 === 0;
 }
 
+/** Normalize to 0x-prefixed hex; accept base64 for signature (e.g. from Unisat). */
+function toHex(s: string, allowBase64 = false): string | null {
+  const raw = String(s).trim();
+  if (!raw) return null;
+  let hex: string;
+  if (raw.startsWith("0x")) {
+    hex = raw;
+  } else if (allowBase64 && /^[A-Za-z0-9+/=]+$/.test(raw) && raw.length % 4 !== 1) {
+    try {
+      const bytes = Buffer.from(raw, "base64");
+      hex = "0x" + bytes.toString("hex");
+    } catch {
+      hex = "0x" + raw.replace(/[^0-9a-fA-F]/g, "");
+    }
+  } else {
+    hex = "0x" + raw.replace(/[^0-9a-fA-F]/g, "");
+  }
+  return isHex(hex) ? hex : null;
+}
+
 function isAddress(s: string): boolean {
   try {
     return ethers.isAddress(s);
@@ -77,12 +97,20 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const messageHex = message.startsWith("0x") ? message : `0x${message}`;
-    const signatureHex = signature.startsWith("0x") ? signature : `0x${signature}`;
-    const dataHex = data.startsWith("0x") ? data : `0x${data}`;
+    const messageHex = toHex(message, false);
+    const signatureHex = toHex(signature, true);
+    const dataHex = toHex(data, false);
 
-    if (!isHex(messageHex) || !isHex(signatureHex) || !isHex(dataHex)) {
-      res.status(400).json({ error: "message, signature, and data must be valid hex strings" });
+    if (!messageHex) {
+      res.status(400).json({ error: "message must be valid hex (0x...) or UTF-8 string" });
+      return;
+    }
+    if (!signatureHex) {
+      res.status(400).json({ error: "signature must be valid hex (0x...) or base64" });
+      return;
+    }
+    if (!dataHex) {
+      res.status(400).json({ error: "data must be valid hex (0x...)" });
       return;
     }
     if (!isAddress(smartAccount) || !isAddress(target)) {
@@ -110,9 +138,31 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
     const result = await relayTransaction(params);
     res.status(200).json({ txHash: result.txHash });
   } catch (err) {
+    console.error("[relay] error:", err);
     const message = err instanceof Error ? err.message : String(err);
-    const isRevert = message.includes("revert") || message.includes("InvalidSignature") || message.includes("InvalidNonce") || message.includes("CallFailed");
-    res.status(isRevert ? 400 : 500).json({ error: message });
+    const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
+    const errInfo = err && typeof err === "object" && "info" in err ? (err as { info?: { error?: { data?: string } } }).info : undefined;
+    const revertData = errInfo?.error?.data ?? "";
+    const errors = err && typeof err === "object" && "errors" in err ? (err as { errors?: unknown[] }).errors : [];
+    const subMsg = Array.isArray(errors) && errors.length > 0 && errors[0] instanceof Error ? (errors[0] as Error).message : "";
+    const full = message || code || subMsg || (err && typeof err === "object" ? JSON.stringify(err) : "Relayer failed");
+    const isRevert = full.includes("revert") || full.includes("InvalidSignature") || full.includes("InvalidNonce") || full.includes("CallFailed");
+    const isInvalidSig = revertData === "0x8baa579f" || full.includes("InvalidSignature");
+    const isInvalidNonce = revertData === "0x06427aeb" || full.includes("InvalidNonce");
+    const isRpc =
+      full.includes("detect network") || full.includes("ECONNREFUSED") || full.includes("ENOTFOUND") ||
+      full.includes("fetch") || full.includes("NETWORK_ERROR") || full.includes("ETIMEDOUT") || full.includes("ENETUNREACH") ||
+      code === "ETIMEDOUT" || code === "ENETUNREACH" || (typeof message === "string" && (message.includes("ETIMEDOUT") || message.includes("ENETUNREACH")));
+    let errorMsg: string;
+    if (isRpc)
+      errorMsg = "Rootstock RPC unreachable (timeout or network blocked). Try another RPC in relayer/.env: https://rootstock-testnet.drpc.org or https://public-node.testnet.rsk.co. Check firewall/VPN.";
+    else if (isInvalidSig)
+      errorMsg = "Invalid signature: the signer does not match the Smart Account owner. Deploy the SmartAccount with the Ethereum address derived from your Unisat (Bitcoin) public key. See repo README.";
+    else if (isInvalidNonce)
+      errorMsg = "Invalid nonce. Refresh the page and try again.";
+    else
+      errorMsg = full || "Unknown relayer error";
+    res.status(isRevert ? 400 : 500).json({ error: errorMsg });
   }
 });
 

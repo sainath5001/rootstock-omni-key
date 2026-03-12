@@ -48,8 +48,11 @@ $ anvil
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ source .env
+$ forge script script/Deploy.s.sol:DeployScript --rpc-url $ROOTSTOCK_RPC_URL --private-key $DEPLOYER_PRIVATE_KEY --broadcast --legacy
 ```
+
+**SmartAccount owner (Unisat):** The `SMART_ACCOUNT_OWNER` in `.env` must be the **Ethereum address** that corresponds to the same Bitcoin key used in Unisat. If you get "Invalid signature" in the demo app, the owner does not match your Unisat key. To derive the Ethereum address from your Unisat (Bitcoin) public key: use the **uncompressed** public key (65 bytes), take `keccak256(pubkey)[12:32]` (last 20 bytes), and format as `0x` + hex. You can use a small script or an online tool that converts Bitcoin pubkey → Ethereum address; then set that as `SMART_ACCOUNT_OWNER` and redeploy the SmartAccount.
 
 ### Cast
 
