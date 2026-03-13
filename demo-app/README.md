@@ -54,7 +54,30 @@ Create `.env.local` (or set env vars) with:
 
 All variables are prefixed with `NEXT_PUBLIC_` so they are available in the browser.
 
+## Where the SDK is used
+
+This demo-app is a reference for integrating **omni-key-sdk**. The SDK is used as follows:
+
+| SDK API | Used in | Purpose |
+|--------|---------|---------|
+| `OmniKeyClient`, `detectUnisat` | `services/omni.ts` | Single client and Unisat detection; all SDK calls go through this module. |
+| `connectWallet()` | `ConnectWallet.tsx` via `omni.ts` | Connect button: connects Unisat and returns Bitcoin address. |
+| `getAddress()` | `ConnectWallet.tsx`, `index.tsx` via `omni.ts` | Show connected address; restore connection on load. |
+| `detectUnisat()` → `isUnisatAvailable()` | `index.tsx` | Show “Unisat not installed” banner and disable Connect when Unisat is missing. |
+| `getOwnerAddress()` | `index.tsx` via `omni.ts` | Show the Ethereum address that must be SmartAccount `owner` (for deployment). |
+| `signAndRelay()` | `Counter.tsx` via `incrementCounter()` in `omni.ts` | Increment button: build payload, sign with Unisat, send to relayer, return tx hash. |
+
+RPC calls (nonce, counter value) use **ethers** in `services/omni.ts`; the SDK handles only wallet connection, owner derivation, signing, and relayer submission.
+
 ## Running the app
+
+**You need the relayer running** for connect/counter/increment to work. Start it first (e.g. in another terminal):
+
+```bash
+cd relayer && npm run dev
+```
+
+Then start the demo-app.
 
 **Development**
 
