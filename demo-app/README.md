@@ -142,6 +142,7 @@ demo-app/
 |-------|------------|
 | **“Unisat not installed”** | User must install the [Unisat](https://unisat.io/) extension. The app does not use MetaMask. |
 | **“Failed to connect to MetaMask”** in console | Comes from another extension. Ignore it; use **Connect Unisat** in the app. |
+| **Console error from MetaMask** (`chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn` or `Object.connect`) and app won’t load | This app does not use MetaMask, but the MetaMask extension injects into the page. If MetaMask is **locked**, it can throw and block the page. Try **unlocking MetaMask** (or disable the extension for this site); then reload. |
 | **“Cannot reach the relayer”** | Start the relayer (`cd relayer && npm run dev`). Ensure `NEXT_PUBLIC_RELAYER_URL` is correct and reachable from the browser (e.g. no localhost if the app is on another host). |
 | **“SmartAccount owner mismatch” / “Invalid signature”** | The SmartAccount must be deployed with `owner` = the address shown in the app (from `getOwnerAddress()`). Redeploy with that `SMART_ACCOUNT_OWNER` and set `RELAYER_ADDRESS` in contracts. See [contracts/README.md](../contracts/README.md). |
 | **Counter stays “—” or increment fails** | Check `NEXT_PUBLIC_SMART_ACCOUNT_ADDRESS`, `NEXT_PUBLIC_COUNTER_ADDRESS`, and `NEXT_PUBLIC_RPC_URL`. Ensure contracts are deployed on the same network as the RPC. |
