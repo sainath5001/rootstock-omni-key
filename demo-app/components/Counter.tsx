@@ -53,54 +53,37 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
 
   if (!isConnected) {
     return (
-      <p style={styles.hint}>Connect your Unisat wallet to see the counter.</p>
+      <p className="text-sm text-[#8A94A6]">Connect your Unisat wallet to see the counter.</p>
     );
   }
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.counterBox}>
-        <span style={styles.label}>Counter</span>
-        <span style={styles.value}>{value !== null ? value : "—"}</span>
+    <div className="flex flex-col gap-5">
+      <div className="rounded-lg bg-[#0B0F1A]/80 px-6 py-8 text-center">
+        <span className="block text-xs font-medium uppercase tracking-wider text-[#8A94A6] mb-2">Counter</span>
+        <span className="text-4xl font-semibold text-white tabular-nums">{value !== null ? value : "—"}</span>
       </div>
       <button
         onClick={handleIncrement}
         disabled={loading}
-        style={styles.button}
+        className="w-full rounded-lg bg-[#F7931A] px-5 py-3 font-medium text-[#0B0F1A] transition-all duration-200 hover:bg-[#FF9F2E] hover:shadow-md hover:shadow-[#F7931A]/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-none"
       >
         {loading ? "Signing & sending…" : "Increment Counter"}
       </button>
       {txHash && (
-        <p style={styles.tx}>
-          Tx: <a href={`https://explorer.testnet.rootstock.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={styles.link}>{txHash.slice(0, 10)}…</a>
+        <p className="text-sm text-[#8A94A6]">
+          Tx:{" "}
+          <a
+            href={`https://explorer.testnet.rootstock.io/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#00D1FF] hover:text-[#33DAFF] underline"
+          >
+            {txHash.slice(0, 10)}…
+          </a>
         </p>
       )}
-      {error && <p style={styles.error}>{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: { display: "flex", flexDirection: "column", gap: 16 },
-  hint: { color: "#666", fontSize: 14 },
-  counterBox: {
-    padding: 24,
-    backgroundColor: "#f8f8f8",
-    borderRadius: 12,
-    textAlign: "center",
-  },
-  label: { display: "block", fontSize: 12, color: "#666", marginBottom: 4 },
-  value: { fontSize: 32, fontWeight: 600 },
-  button: {
-    padding: "12px 24px",
-    fontSize: 16,
-    cursor: "pointer",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-  },
-  tx: { fontSize: 13, color: "#666" },
-  link: { color: "#0066cc" },
-  error: { color: "#c00", fontSize: 14 },
-};

@@ -1,0 +1,17 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+body {
+  @apply antialiased;
+  background-color: #0B0F1A;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+button {
+  @apply transition-all duration-200 ease-out;
+}
+
+a {
+  @apply transition-colors duration-150;
+}

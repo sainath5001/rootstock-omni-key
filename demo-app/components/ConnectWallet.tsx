@@ -52,9 +52,9 @@ export function ConnectWallet({ onConnect, connectedAddress, unisatAvailable = t
   const displayAddress = address ?? connectedAddress;
   if (displayAddress) {
     return (
-      <div style={styles.connected}>
-        <span style={styles.label}>Connected</span>
-        <span style={styles.address} title={displayAddress}>
+      <div className="mb-5 flex flex-col gap-1">
+        <span className="text-xs font-medium uppercase tracking-wider text-[#8A94A6]">Connected</span>
+        <span className="font-mono text-sm text-white" title={displayAddress}>
           {displayAddress.slice(0, 8)}…{displayAddress.slice(-6)}
         </span>
       </div>
@@ -62,32 +62,17 @@ export function ConnectWallet({ onConnect, connectedAddress, unisatAvailable = t
   }
 
   return (
-    <div style={styles.wrapper}>
-      <button onClick={handleConnect} disabled={loading || !unisatAvailable} style={styles.button}>
+    <div className="mb-5">
+      <button
+        onClick={handleConnect}
+        disabled={loading || !unisatAvailable}
+        className="w-full rounded-lg bg-[#F7931A] px-5 py-3 font-medium text-[#0B0F1A] transition-all duration-200 hover:bg-[#FF9F2E] hover:shadow-md hover:shadow-[#F7931A]/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-none"
+      >
         {loading ? "Connecting…" : unisatAvailable ? "Connect Unisat" : "Unisat not installed"}
       </button>
-      {error && <p style={styles.error}>{error}</p>}
+      {error && (
+        <p className="mt-3 text-sm text-red-400">{error}</p>
+      )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: { marginBottom: 16 },
-  button: {
-    padding: "10px 20px",
-    fontSize: 16,
-    cursor: "pointer",
-    backgroundColor: "#f0f0f0",
-    border: "1px solid #ccc",
-    borderRadius: 8,
-  },
-  connected: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    marginBottom: 16,
-  },
-  label: { fontSize: 12, color: "#666" },
-  address: { fontFamily: "monospace", fontSize: 14 },
-  error: { color: "#c00", fontSize: 14, marginTop: 8 },
-};

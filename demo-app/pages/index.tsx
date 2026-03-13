@@ -43,61 +43,35 @@ export default function Home() {
         <meta name="description" content="Bitcoin wallet controls a Rootstock smart contract" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <main style={styles.main}>
-        <h1 style={styles.title}>Omni Counter</h1>
-        <p style={styles.subtitle}>
-          Use your Bitcoin wallet (Unisat) to increment a counter on Rootstock.
-        </p>
-        {mounted && (
-          <p style={styles.metaHint}>
-            This app uses <strong>Unisat only</strong>, not MetaMask. If you see &quot;Failed to connect to MetaMask&quot;, ignore it (from another extension) and click &quot;Connect Unisat&quot;.
+      <main className="min-h-screen bg-[#0B0F1A] px-4 py-10 sm:px-6 sm:py-14">
+        <div className="mx-auto max-w-md">
+          <h1 className="font-semibold text-white text-2xl sm:text-3xl tracking-tight mb-2">
+            Omni Counter
+          </h1>
+          <p className="text-[#8A94A6] text-sm sm:text-base mb-2">
+            Use your Bitcoin wallet (Unisat) to increment a counter on Rootstock.
           </p>
-        )}
-        {mounted && !unisatAvailable && (
-          <div style={styles.warnBox}>
-            <strong>Use Unisat only.</strong> Install the Unisat extension. This app does <strong>not</strong> use MetaMask. If you see &quot;Failed to connect to MetaMask&quot;, ignore it—that is from another extension; click &quot;Connect Unisat&quot; below.
-          </div>
-        )}
-        <div style={styles.card}>
-          <ConnectWallet onConnect={setAddress} connectedAddress={address} unisatAvailable={unisatAvailable} />
-          {ownerAddress && (
-            <p style={styles.ownerHint}>
-              SmartAccount must be deployed with owner: <code style={styles.code}>{ownerAddress}</code>
+          {mounted && (
+            <p className="text-[#6B7280] text-xs mb-6">
+              This app uses <strong className="text-[#8A94A6]">Unisat only</strong>, not MetaMask. If you see &quot;Failed to connect to MetaMask&quot;, ignore it (from another extension) and click &quot;Connect Unisat&quot;.
             </p>
           )}
-          <Counter isConnected={!!address} ownerAddress={ownerAddress} />
+          {mounted && !unisatAvailable && (
+            <div className="mb-6 rounded-lg border border-[#B36B00]/50 bg-[#B36B00]/10 px-4 py-3 text-sm text-[#F7931A]">
+              <strong>Use Unisat only.</strong> Install the Unisat extension. This app does <strong>not</strong> use MetaMask. If you see &quot;Failed to connect to MetaMask&quot;, ignore it—that is from another extension; click &quot;Connect Unisat&quot; below.
+            </div>
+          )}
+          <div className="rounded-xl border border-[#2D3748] bg-[#1B2330] p-6 shadow-lg transition-shadow hover:shadow-[0_8px_32px_rgba(247,147,26,0.08)]">
+            <ConnectWallet onConnect={setAddress} connectedAddress={address} unisatAvailable={unisatAvailable} />
+            {ownerAddress && (
+              <p className="mt-4 mb-4 text-xs text-[#8A94A6] break-all">
+                SmartAccount must be deployed with owner: <code className="rounded bg-[#0B0F1A] px-1.5 py-0.5 font-mono text-[11px] text-[#00D1FF]">{ownerAddress}</code>
+              </p>
+            )}
+            <Counter isConnected={!!address} ownerAddress={ownerAddress} />
+          </div>
         </div>
       </main>
     </>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  main: {
-    minHeight: "100vh",
-    padding: 40,
-    fontFamily: "system-ui, sans-serif",
-    maxWidth: 480,
-    margin: "0 auto",
-  },
-  title: { fontSize: 28, marginBottom: 8 },
-  subtitle: { color: "#666", fontSize: 14, marginBottom: 8 },
-  metaHint: { color: "#888", fontSize: 12, marginBottom: 24 },
-  card: {
-    padding: 24,
-    border: "1px solid #eee",
-    borderRadius: 16,
-    backgroundColor: "#fff",
-  },
-  ownerHint: { fontSize: 12, color: "#666", marginBottom: 16, wordBreak: "break-all" as const },
-  code: { fontFamily: "monospace", fontSize: 11, backgroundColor: "#f0f0f0", padding: "2px 6px", borderRadius: 4 },
-  warnBox: {
-    padding: 12,
-    marginBottom: 16,
-    backgroundColor: "#fff8e6",
-    border: "1px solid #e6c200",
-    borderRadius: 8,
-    fontSize: 14,
-    color: "#333",
-  },
-};
