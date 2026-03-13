@@ -1,12 +1,5 @@
 # Rootstock Omni-Key
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/rsksmart/rootstock-omni-key/badge)](https://scorecard.dev/viewer/?uri=github.com/rsksmart/rootstock-omni-key)
-[![CodeQL](https://github.com/rsksmart/rootstock-omni-key/actions/workflows/codeql.yml/badge.svg)](https://github.com/rsksmart/rootstock-omni-key/actions?query=workflow%3ACodeQL)
-
-<img src="rootstock-logo.png" alt="Rootstock Logo" style="width:100%; height: auto;" />
-
----
-
 Use a **Bitcoin wallet** (Unisat) to control a smart contract on **Rootstock**. No RBTC in the user’s wallet; the relayer pays gas. Users sign with their Bitcoin key; a backend relayer submits the transaction; the SmartAccount executes the call.
 
 ## What this is
@@ -68,11 +61,6 @@ Each folder has its own **README** with setup, config, and usage.
 - [SDK](sdk/omni-key-sdk/README.md) – API, integration, types.
 - [Relayer](relayer/README.md) – API, config, Unisat fallback.
 - [Demo app](demo-app/README.md) – Run order, where the SDK is used, troubleshooting.
-
-## Badges and logo
-
-- **OpenSSF Scorecard** and **CodeQL** badge URLs use `rsksmart/rootstock-omni-key`. If your repo is under a different org or name, update the URLs in the badges above.
-- **Logo**: place `rootstock-logo.png` in the repository root so the image displays correctly.
 
 ## License
 
