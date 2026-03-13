@@ -1,183 +1,120 @@
-# omni-key-sdk
+# Omni-Key SDK
 
-TypeScript SDK for **Rootstock Omni-Key**: connect Bitcoin wallets (e.g. [Unisat](https://unisat.io/)) to Rootstock dApps. Users sign messages with their Bitcoin wallet; a relayer submits the transaction to Rootstock; the SmartAccount verifies the signature and executes the call.
+TypeScript SDK for **Rootstock Omni-Key**: connect Bitcoin wallets (Unisat) to Rootstock dApps. Your users sign with their Bitcoin key; a relayer submits the transaction to Rootstock; the SmartAccount executes the call. This is the library you integrate into your frontend or Node app when building on Omni-Key.
 
-## Install
+## Features
+
+- **Unisat wallet** – Connect, get address, sign messages (Bitcoin-style).
+- **Owner address** – Derive the Ethereum address that must be the SmartAccount `owner` (for deployment and UX).
+- **Sign & relay** – Build the signed payload, send to your relayer, get the Rootstock tx hash.
+- **Flexible API** – Use the `OmniKeyClient` class or standalone functions (`connectWallet`, `signMessage`, `relayTransaction`, etc.).
+- **TypeScript** – Full types and interfaces exported.
+
+## Requirements
+
+- **Browser** – Unisat injects `window.unisat`; the SDK is intended for browser use (e.g. React, Next.js, Vite). Server-side code can use config and types; `connectWallet` / `signMessage` require a browser.
+- **Unisat extension** – Users must have [Unisat](https://unisat.io/) installed. For owner derivation and Unisat-path relay, Unisat must expose `getPublicKey()`.
+- **Relayer** – A running Omni-Key relayer (or your own) that accepts `POST /relay` and submits to Rootstock.
+- **SmartAccount** – Deployed with `owner` = Ethereum address derived from the user’s Unisat public key (see `getOwnerAddress()`). For Unisat signing, the contract should also have `relayer` set.
+
+## Installation
 
 ```bash
 npm install omni-key-sdk
 ```
+
+**Peer dependency:** `ethers` (^6). If your project does not have it:
+
+```bash
+npm install ethers
+```
+
+**Monorepo / local:** from the repo root you can use the SDK in the demo-app via workspace or `file:../sdk/omni-key-sdk`. For publishing, the package builds with `npm run build` (see **Build** below).
 
 ## Quick start
 
 ```ts
 import { OmniKeyClient } from "omni-key-sdk";
 
-const omni = new OmniKeyClient({
-  relayerUrl: "http://localhost:3001",
-  smartAccountAddress: "0x...", // optional if passed per call
+const client = new OmniKeyClient({
+  relayerUrl: "https://your-relayer.com",  // or http://localhost:3001
+  smartAccountAddress: "0x...",            // optional if you pass it per call
 });
 
-// Connect Unisat
-const bitcoinAddress = await omni.connectWallet();
+// 1) Connect Unisat (shows wallet prompt)
+const bitcoinAddress = await client.connectWallet();
 
-// Sign and relay (e.g. increment counter)
-const txHash = await omni.signAndRelay({
-  message: "0x", // or any hex/UTF-8 message
+// 2) Optional: show users which owner address the SmartAccount must use
+const ownerAddress = await client.getOwnerAddress();
+// → Use this as SMART_ACCOUNT_OWNER when deploying the SmartAccount
+
+// 3) Sign and relay a meta-tx (e.g. call a contract)
+const nonce = 0n; // in practice: read from SmartAccount.nonce()
+const data = "0x..."; // e.g. Counter.increment() calldata
+const txHash = await client.signAndRelay({
+  message: "0x",
   target: "0xCounterAddress",
-  data: "0x...", // e.g. Counter.increment() calldata
-  nonce: 0,     // current SmartAccount nonce (read from contract)
+  data,
+  nonce,
   smartAccount: "0x...", // optional if set in config
 });
-
 console.log("Tx hash:", txHash);
 ```
 
-## For developers
+## API reference
 
-Use the SDK in your own dApp (React, Next.js, Vite, etc.) as follows.
+### `OmniKeyClient`
 
-### What you need
+Main client for wallet connection, signing, and relaying.
 
-- **Relayer URL** – Your relayer or the Omni-Key relayer (e.g. `https://your-relayer.com` or `http://localhost:3001`).
-- **SmartAccount address** – The deployed SmartAccount contract address.
-- **Target contract address** – e.g. Counter (or any contract the SmartAccount is allowed to call).
-- **Current nonce** – Read from `SmartAccount.nonce()` on-chain (see below).
-
-### Getting the nonce
-
-Read the current nonce from the SmartAccount so each signature uses the next expected value:
+#### Constructor
 
 ```ts
-import { ethers } from "ethers";
-
-const provider = new ethers.JsonRpcProvider("https://public-node.testnet.rsk.co");
-const smartAccountAddress = "0x78cb47B2C97922471435d516D17a448BB74015B0";
-
-const abi = ["function nonce() view returns (uint256)"];
-const contract = new ethers.Contract(smartAccountAddress, abi, provider);
-const nonce = await contract.nonce(); // bigint
+const client = new OmniKeyClient(config: OmniKeyClientConfig);
 ```
 
-### Building calldata
+| Config field | Type | Required | Description |
+|--------------|------|----------|-------------|
+| `relayerUrl` | string | Yes | Base URL of the relayer (e.g. `https://relayer.example.com`). Trailing slash is stripped. |
+| `smartAccountAddress` | string | No | Default SmartAccount address. Can be overridden per `signAndRelay` / `relayTransaction` call. |
 
-Encode the target contract call (e.g. `Counter.increment()`):
+#### Static methods
 
-```ts
-import { ethers } from "ethers";
+| Method | Returns | Description |
+|--------|--------|-------------|
+| `OmniKeyClient.detectUnisat()` | boolean | `true` if `window.unisat` is available (Unisat extension installed). |
 
-const counterInterface = new ethers.Interface([
-  "function increment()",
-]);
-const data = counterInterface.encodeFunctionData("increment");
-```
+#### Instance methods
 
-### Minimal React example
+| Method | Returns | Description |
+|--------|--------|-------------|
+| `connectWallet()` | `Promise<string>` | Requests Unisat connection; returns the current Bitcoin address. |
+| `getAddress()` | `Promise<string>` | Returns current Unisat address without prompting. Throws if not connected. |
+| `getOwnerAddress()` | `Promise<string>` | Ethereum address derived from Unisat public key. Use as SmartAccount `owner` when deploying. Requires Unisat `getPublicKey()`. |
+| `signMessage(message: string)` | `Promise<string>` | Signs a message (hex string) with Unisat. Returns signature (format depends on Unisat, e.g. base64). |
+| `signAndRelay(params)` | `Promise<string>` | Builds payload hash, gets signature from Unisat, sends to relayer. Returns Rootstock tx hash. |
+| `relayTransaction(payload)` | `Promise<string>` | Sends an already-built payload to the relayer. Returns tx hash. |
 
-```tsx
-import { useState } from "react";
-import { OmniKeyClient } from "omni-key-sdk";
-import { ethers } from "ethers";
+#### `signAndRelay(params: SignAndRelayParams)`
 
-const RELAYER_URL = "http://localhost:3001";
-const SMART_ACCOUNT = "0x78cb47B2C97922471435d516D17a448BB74015B0";
-const COUNTER_ADDRESS = "0xf68d5923485aB66E9DFbA3E78e16A133F43Bc5ec";
-const RPC = "https://public-node.testnet.rsk.co";
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | Message bytes: hex (`0x...`) or UTF-8. Often `"0x"` for simple contract calls. |
+| `target` | string | Yes | Contract address to call (e.g. Counter). |
+| `data` | string | Yes | Calldata (hex `0x...`), e.g. from `interface.encodeFunctionData("increment")`. |
+| `nonce` | number \| string \| bigint | Yes | Current SmartAccount nonce (must match on-chain). |
+| `smartAccount` | string | No | SmartAccount address; uses client config if omitted. |
 
-const smartAccountAbi = ["function nonce() view returns (uint256)"];
-const counterInterface = new ethers.Interface(["function increment()"]);
+### Standalone functions
 
-export function OmniCounter() {
-  const [address, setAddress] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const omni = new OmniKeyClient({ relayerUrl: RELAYER_URL, smartAccountAddress: SMART_ACCOUNT });
-
-  const handleConnect = async () => {
-    try {
-      setError(null);
-      const addr = await omni.connectWallet();
-      setAddress(addr);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  const handleIncrement = async () => {
-    if (!address) return;
-    try {
-      setError(null);
-      const provider = new ethers.JsonRpcProvider(RPC);
-      const smartAccount = new ethers.Contract(SMART_ACCOUNT, smartAccountAbi, provider);
-      const nonce = await smartAccount.nonce();
-      const data = counterInterface.encodeFunctionData("increment");
-      const hash = await omni.signAndRelay({
-        message: "0x",
-        target: COUNTER_ADDRESS,
-        data,
-        nonce,
-        smartAccount: SMART_ACCOUNT,
-      });
-      setTxHash(hash);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  return (
-    <div>
-      {!address ? (
-        <button onClick={handleConnect}>Connect Unisat</button>
-      ) : (
-        <>
-          <p>Connected: {address}</p>
-          <button onClick={handleIncrement}>Increment</button>
-        </>
-      )}
-      {txHash && <p>Tx: {txHash}</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
-    </div>
-  );
-}
-```
-
-### Next.js
-
-Use environment variables for URLs and addresses (e.g. `NEXT_PUBLIC_RELAYER_URL`, `NEXT_PUBLIC_SMART_ACCOUNT_ADDRESS`) and ensure the Omni-Key logic runs in the browser (e.g. inside `useEffect` or after checking `typeof window !== "undefined"`), since Unisat is only available on the client.
-
-## API
-
-### `OmniKeyClient(config)`
-
-- **config.relayerUrl** – Base URL of the relayer (e.g. `http://localhost:3001`).
-- **config.smartAccountAddress** – (Optional) Default SmartAccount contract address.
-
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `connectWallet()` | Prompts Unisat to connect; returns Bitcoin address. |
-| `getAddress()` | Returns current Unisat address (no prompt). Throws if not connected. |
-| `signMessage(message)` | Signs an arbitrary hex message with Unisat. |
-| `signAndRelay(params)` | Builds payload hash, requests signature, sends to relayer; returns tx hash. |
-| `relayTransaction(payload)` | Sends an already-signed payload to the relayer. |
-
-### `signAndRelay(params)`
-
-- **params.message** – Message bytes: hex string (`0x...`) or UTF-8 string.
-- **params.target** – Target contract address.
-- **params.data** – Calldata (hex `0x...`).
-- **params.nonce** – Current nonce from `SmartAccount.nonce()`.
-- **params.smartAccount** – (Optional) SmartAccount address if not set in config.
-
-### Standalone
+Use these if you prefer a functional style or need only part of the flow:
 
 ```ts
 import {
   detectUnisat,
-  connectWallet,
   getAddress,
+  getOwnerAddress,
+  connectWallet,
   signMessage,
   relayTransaction,
   buildPayloadHash,
@@ -185,17 +122,116 @@ import {
 } from "omni-key-sdk";
 ```
 
-## Requirements
+| Function | Description |
+|----------|-------------|
+| `detectUnisat()` | Returns whether Unisat is available. |
+| `connectWallet()` | Connects Unisat; returns Bitcoin address. |
+| `getAddress()` | Current Unisat address; throws if not connected. |
+| `getOwnerAddress()` | Ethereum address for SmartAccount owner (from Unisat public key). |
+| `signMessage(messageHex)` | Signs with Unisat; returns signature. |
+| `getMessageToSign(smartAccount, nonce, target, data, messageHex)` | Returns the 32-byte hash that the user must sign (same as SmartAccount/relayer expect). |
+| `buildPayloadHash(...)` | Same inputs as `getMessageToSign`; returns the payload hash. |
+| `relayTransaction(relayerUrl, payload)` | POSTs `payload` to `relayerUrl/relay`; returns tx hash. |
 
-- Browser environment (Unisat injects `window.unisat`).
-- Relayer running and configured with the same SmartAccount.
-- User must have Unisat extension installed.
+### TypeScript types
+
+```ts
+import type {
+  OmniKeyClientConfig,
+  SignAndRelayParams,
+  RelayPayload,
+  RelayResponse,
+  UnisatProvider,
+} from "omni-key-sdk";
+```
+
+- **OmniKeyClientConfig** – Constructor config: `relayerUrl`, optional `smartAccountAddress`.
+- **SignAndRelayParams** – `message`, `target`, `data`, `nonce`, optional `smartAccount`.
+- **RelayPayload** – Body for `POST /relay`: `message`, `signature`, `nonce`, `smartAccount`, `target`, `data`.
+- **RelayResponse** – `{ txHash: string }`.
+- **UnisatProvider** – Typing for `window.unisat` (e.g. for custom wrappers).
+
+## Integration guide
+
+### 1. Check for Unisat
+
+Before showing “Connect wallet”, check that Unisat is available:
+
+```ts
+if (!OmniKeyClient.detectUnisat()) {
+  // Show: "Install Unisat" or hide Connect button
+}
+```
+
+### 2. Get the SmartAccount nonce
+
+Each meta-tx must use the current nonce. Read it from the chain before each `signAndRelay`:
+
+```ts
+import { ethers } from "ethers";
+
+const provider = new ethers.JsonRpcProvider("https://public-node.testnet.rsk.co");
+const abi = ["function nonce() view returns (uint256)"];
+const contract = new ethers.Contract(smartAccountAddress, abi, provider);
+const nonce = await contract.nonce(); // bigint
+```
+
+### 3. Build calldata
+
+Encode the target contract call with ethers:
+
+```ts
+const counterInterface = new ethers.Interface(["function increment()"]);
+const data = counterInterface.encodeFunctionData("increment");
+```
+
+### 4. Deploy SmartAccount with the correct owner
+
+After the user connects, you can show them the address that must be the SmartAccount owner (for deployment or verification):
+
+```ts
+const ownerAddress = await client.getOwnerAddress();
+// Deploy SmartAccount with constructor(ownerAddress, relayerAddress)
+// or check that existing SmartAccount.owner() === ownerAddress
+```
+
+If the user’s Unisat key changes or they use another wallet, the owner address changes; the SmartAccount must be deployed (or a new one used) for that owner.
+
+### 5. Handle errors
+
+- **Unisat not found** – `detectUnisat()` false or `connectWallet` / `signMessage` throw. Prompt to install the extension.
+- **Not connected** – `getAddress()` / `getOwnerAddress()` throw. Call `connectWallet()` first.
+- **Relayer errors** – `signAndRelay` / `relayTransaction` throw with message like `Relayer error (400): Invalid signature...`. Surface the message to the user; often the SmartAccount needs to be redeployed with the owner from `getOwnerAddress()`.
+- **getPublicKey not available** – `getOwnerAddress()` throws if Unisat does not expose `getPublicKey`. User needs a compatible Unisat version; otherwise you cannot derive the owner for deployment.
+
+### 6. React / Next.js
+
+- Use env vars for `relayerUrl` and `smartAccountAddress` (e.g. `NEXT_PUBLIC_RELAYER_URL`).
+- Run Unisat-dependent code in the browser only (e.g. after mount, inside `useEffect`, or with `typeof window !== "undefined"`). Avoid calling `connectWallet` or `signMessage` during SSR.
+
+## Project structure
+
+```
+omni-key-sdk/
+├── src/
+│   ├── index.ts    # Exports + OmniKeyClient
+│   ├── types.ts    # UnisatProvider, config and payload types
+│   ├── wallet.ts   # Unisat detection, connect, getAddress, getOwnerAddress
+│   └── signer.ts   # buildPayloadHash, getMessageToSign, signMessage, relayTransaction
+├── dist/           # Built output (JS + .d.ts)
+├── package.json
+└── README.md
+```
 
 ## Build
+
+From the SDK directory:
 
 ```bash
 npm run build
 ```
+
+Runs `tsc` and emits to `dist/`. `prepublishOnly` runs build before publish.
 
 ## License
 
