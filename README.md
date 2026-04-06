@@ -22,6 +22,31 @@ Use a **Bitcoin wallet** (Unisat) to control a smart contract on **Rootstock**. 
 
 Each folder has its own **README** with setup, config, and usage.
 
+## SDK (what it is / how to use it)
+
+The SDK (`omni-key-sdk`) is the **frontend integration layer**. It helps you:
+
+- connect to **Unisat** (`connectWallet`, `getAddress`)
+- derive the SmartAccount **owner address** from the user’s Unisat public key (`getOwnerAddress`) so you deploy with the correct owner
+- build the **signable payload hash** (includes `chainId`) and collect a signature from Unisat
+- send the signed payload to your relayer (`relayTransaction`) and get back a Rootstock tx hash
+
+What the SDK does **not** do:
+
+- it does not deploy contracts (use `contracts/`)
+- it does not pay gas (the relayer pays gas)
+- it does not replace your normal contract ABI calls; you still encode `target` + `data` (calldata) yourself
+
+Minimal flow (browser):
+
+```ts
+import { OmniKeyClient } from "omni-key-sdk";
+
+const client = new OmniKeyClient({ relayerUrl: "http://localhost:3001" });
+await client.connectWallet();
+const owner = await client.getOwnerAddress(); // deploy SmartAccount with this owner
+```
+
 ## Quick start
 
 1. **Deploy contracts** (Rootstock testnet or mainnet)  
