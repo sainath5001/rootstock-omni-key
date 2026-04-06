@@ -32,7 +32,7 @@ Each folder has its own **README** with setup, config, and usage.
 2. **Start the relayer**  
    ```bash
    cd relayer && cp .env.example .env
-   # Edit .env: ROOTSTOCK_RPC_URL, RELAYER_PRIVATE_KEY
+   # Edit .env: ROOTSTOCK_RPC_URL, RELAYER_PRIVATE_KEY, CORS_ORIGINS, rate limit (optional)
    npm install && npm run dev
    ```
    See [relayer/README.md](relayer/README.md).
@@ -47,6 +47,17 @@ Each folder has its own **README** with setup, config, and usage.
 
 4. **Use Unisat**  
    Install the [Unisat](https://unisat.io/) extension, open the app, connect, then use the counter. The app uses Unisat only (ignore any MetaMask-related messages from other extensions).
+
+## Tests
+
+From repo root:
+
+```bash
+cd contracts && forge test
+cd ../sdk/omni-key-sdk && npm test
+cd ../../relayer && npm test && npm audit --omit=dev
+cd ../demo-app && npm run build
+```
 
 ## Requirements
 

@@ -39,9 +39,12 @@ cp .env.example .env
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ROOTSTOCK_RPC_URL` | Yes | Rootstock RPC URL. Testnet: `https://public-node.testnet.rsk.co` or `https://rootstock-testnet.drpc.org`. Mainnet: `https://public-node.rsk.co`. |
+| `ROOTSTOCK_RPC_URL` | Yes | Rootstock RPC URL. Testnet: `https://public-node.testnet.rsk.co`. Mainnet: `https://public-node.rsk.co`. |
 | `RELAYER_PRIVATE_KEY` | Yes | Private key of the wallet that pays gas. No `0x` prefix. Must be kept secret. |
 | `SMART_ACCOUNT_ADDRESS` | No | Default SmartAccount address if the client does not send `smartAccount`. Leave empty if the client always sends it. |
+| `CORS_ORIGINS` | No | Comma-separated allowlist of browser origins permitted to call the relayer. Default: `http://localhost:3000`. |
+| `RATE_LIMIT_WINDOW_MS` | No | Rate limit window size in ms. Default: `60000`. |
+| `RATE_LIMIT_MAX` | No | Max requests per window per IP. Default: `30`. |
 | `PORT` | No | HTTP server port. Default: `3001`. |
 
 **Security**
@@ -94,6 +97,7 @@ Submit a signed meta-transaction for the SmartAccount to execute.
 | `message` | string | Yes | Message (hex `0x...` or UTF-8) used in the signed payload. |
 | `signature` | string | Yes | Signature as hex (`0x...`) or base64 (e.g. Unisat). |
 | `nonce` | number \| string | Yes | Current SmartAccount nonce (must match on-chain). |
+| `chainId` | number \| string | Yes | Chain ID included in the signed payload (testnet `31`, mainnet `30`). |
 | `smartAccount` | string | If not in env | SmartAccount contract address. |
 | `target` | string | Yes | Contract address to call (e.g. Counter). |
 | `data` | string | Yes | Calldata for the call (hex `0x...`). |
@@ -147,6 +151,18 @@ relayer/
 └── tsconfig.json
 ```
 
+## Tests
+
+```bash
+npm test
+```
+
+## Dependency audit
+
+```bash
+npm audit --omit=dev
+```
+
 ## Troubleshooting
 
 | Symptom | What to check |
@@ -154,7 +170,7 @@ relayer/
 | **Invalid signature** | SmartAccount `owner` must match the signer. For Unisat, deploy with `SMART_ACCOUNT_OWNER` = Ethereum address derived from the Unisat public key (demo app shows this). |
 | **Invalid nonce** | Client must use the current SmartAccount nonce (e.g. fetch before each sign). Refresh and retry. |
 | **Contract has no relayer set** | Redeploy SmartAccount with `RELAYER_ADDRESS` in `contracts/.env` set to this relayer’s wallet address. |
-| **RPC timeout / unreachable** | Use another RPC in `ROOTSTOCK_RPC_URL` (e.g. `https://rootstock-testnet.drpc.org`). Check firewall and network. |
+| **RPC timeout / unreachable** | Try `https://public-node.testnet.rsk.co` (testnet). Check firewall and network. |
 | **Unisat signer does not match owner** | Ensure the same Unisat key is used to derive the owner and to sign; redeploy SmartAccount with that owner if needed. |
 
 ## License

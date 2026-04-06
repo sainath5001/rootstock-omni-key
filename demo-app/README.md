@@ -65,7 +65,7 @@ This demo-app is a reference for integrating **omni-key-sdk**. The SDK is used a
 | `getAddress()` | `ConnectWallet.tsx`, `index.tsx` via `omni.ts` | Show connected address; restore connection on load. |
 | `detectUnisat()` → `isUnisatAvailable()` | `index.tsx` | Show “Unisat not installed” banner and disable Connect when Unisat is missing. |
 | `getOwnerAddress()` | `index.tsx` via `omni.ts` | Show the Ethereum address that must be SmartAccount `owner` (for deployment). |
-| `signAndRelay()` | `Counter.tsx` via `incrementCounter()` in `omni.ts` | Increment button: build payload, sign with Unisat, send to relayer, return tx hash. |
+| `getMessageToSign()`, `signMessage()`, `relayTransaction()` | `Counter.tsx` via `incrementCounter()` in `omni.ts` | Increment button: build payload, sign with Unisat, send to relayer, return tx hash. |
 
 RPC calls (nonce, counter value) use **ethers** in `services/omni.ts`; the SDK handles only wallet connection, owner derivation, signing, and relayer submission.
 
@@ -95,6 +95,14 @@ npm start
 ```
 
 Serves the built app (default port 3000). Point your reverse proxy or load balancer at this process in production.
+
+## Build check
+
+This repo treats `npm run build` as the main frontend verification step:
+
+```bash
+npm run build
+```
 
 ## Project structure
 
@@ -147,6 +155,7 @@ demo-app/
 | **“SmartAccount owner mismatch” / “Invalid signature”** | The SmartAccount must be deployed with `owner` = the address shown in the app (from `getOwnerAddress()`). Redeploy with that `SMART_ACCOUNT_OWNER` and set `RELAYER_ADDRESS` in contracts. See [contracts/README.md](../contracts/README.md). |
 | **Counter stays “—” or increment fails** | Check `NEXT_PUBLIC_SMART_ACCOUNT_ADDRESS`, `NEXT_PUBLIC_COUNTER_ADDRESS`, and `NEXT_PUBLIC_RPC_URL`. Ensure contracts are deployed on the same network as the RPC. |
 | **SDK type or build errors** | Rebuild the SDK: `cd sdk/omni-key-sdk && npm run build`, then in `demo-app`: `npm install` and `npm run build`. |
+| **Account switch not reflected** | If Unisat supports the `accountsChanged` event, the UI updates automatically. If not, reload the page after switching/locking in the wallet. |
 
 ## Related docs
 
