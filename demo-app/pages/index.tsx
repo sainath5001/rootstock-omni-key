@@ -1,5 +1,5 @@
 import Head from "next/head";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ConnectWallet } from "../components/ConnectWallet";
 import { Counter } from "../components/Counter";
 import { getAddress, getOwnerAddress, isUnisatAvailable } from "../services/omni";
@@ -9,6 +9,7 @@ export default function Home() {
   const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [unisatAvailable, setUnisatAvailable] = useState(false);
+  const handleConnect = useCallback((addr: string) => setAddress(addr), []);
 
   useEffect(() => {
     setMounted(true);
@@ -78,7 +79,7 @@ export default function Home() {
             </div>
           )}
           <div className="rounded-xl border border-[#2D3748] bg-[#1B2330] p-6 shadow-lg transition-shadow hover:shadow-[0_8px_32px_rgba(247,147,26,0.08)]">
-            <ConnectWallet onConnect={setAddress} connectedAddress={address} unisatAvailable={unisatAvailable} />
+            <ConnectWallet onConnect={handleConnect} connectedAddress={address} unisatAvailable={unisatAvailable} />
             {ownerAddress && (
               <p className="mt-4 mb-4 text-xs text-[#8A94A6] break-all">
                 SmartAccount must be deployed with owner: <code className="rounded bg-[#0B0F1A] px-1.5 py-0.5 font-mono text-[11px] text-[#00D1FF]">{ownerAddress}</code>

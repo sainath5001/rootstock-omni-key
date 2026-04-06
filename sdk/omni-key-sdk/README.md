@@ -129,7 +129,7 @@ import {
 | `getAddress()` | Current Unisat address; throws if not connected. |
 | `getOwnerAddress()` | Ethereum address for SmartAccount owner (from Unisat public key). |
 | `signMessage(messageHex)` | Signs with Unisat; returns signature. |
-| `getMessageToSign(smartAccount, nonce, target, data, messageHex)` | Returns the 32-byte hash that the user must sign (same as SmartAccount/relayer expect). |
+| `getMessageToSign(smartAccount, chainId, nonce, target, data, messageHex)` | Returns the 32-byte hash that the user must sign (same as SmartAccount/relayer expect). |
 | `buildPayloadHash(...)` | Same inputs as `getMessageToSign`; returns the payload hash. |
 | `relayTransaction(relayerUrl, payload)` | POSTs `payload` to `relayerUrl/relay`; returns tx hash. |
 
@@ -146,8 +146,8 @@ import type {
 ```
 
 - **OmniKeyClientConfig** – Constructor config: `relayerUrl`, optional `smartAccountAddress`.
-- **SignAndRelayParams** – `message`, `target`, `data`, `nonce`, optional `smartAccount`.
-- **RelayPayload** – Body for `POST /relay`: `message`, `signature`, `nonce`, `smartAccount`, `target`, `data`.
+- **SignAndRelayParams** – `message`, `chainId`, `target`, `data`, `nonce`, optional `smartAccount`.
+- **RelayPayload** – Body for `POST /relay`: `message`, `signature`, `nonce` (string), `chainId` (string), `smartAccount`, `target`, `data`.
 - **RelayResponse** – `{ txHash: string }`.
 - **UnisatProvider** – Typing for `window.unisat` (e.g. for custom wrappers).
 
