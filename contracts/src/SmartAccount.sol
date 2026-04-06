@@ -36,12 +36,14 @@ contract SmartAccount {
         bytes result
     );
 
+    error OwnerZero();
+    error NotRelayer();
     error InvalidSignature();
     error InvalidNonce(uint256 expected, uint256 provided);
     error CallFailed(bytes returndata);
 
     constructor(address _owner, address _relayer) {
-        require(_owner != address(0), "owner zero");
+        if (_owner == address(0)) revert OwnerZero();
         owner = _owner;
         relayer = _relayer;
     }
@@ -68,7 +70,14 @@ contract SmartAccount {
         // Build the signed payload hash. Off-chain code must sign this exact
         // preimage (or the equivalent Bitcoin message with this hash embedded).
         bytes32 payloadHash = keccak256(
-            abi.encodePacked(address(this), _nonce, target, data, keccak256(message))
+            abi.encodePacked(
+                address(this),
+                block.chainid,
+                _nonce,
+                target,
+                data,
+                keccak256(message)
+            )
         );
 
         // Use Ethereum-style signed message prefix for additional protection.
@@ -101,7 +110,7 @@ contract SmartAccount {
         address target,
         bytes calldata data
     ) external returns (bytes memory) {
-        require(relayer != address(0) && msg.sender == relayer, "not relayer");
+        if (relayer == address(0) || msg.sender != relayer) revert NotRelayer();
         if (_nonce != nonce) {
             revert InvalidNonce(nonce, _nonce);
         }

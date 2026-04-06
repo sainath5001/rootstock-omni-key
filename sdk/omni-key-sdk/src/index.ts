@@ -75,6 +75,7 @@ export class OmniKeyClient {
     const nonce = typeof params.nonce === "bigint" ? params.nonce : BigInt(params.nonce);
     const toSign = getMessageToSign(
       smartAccount,
+      params.chainId,
       nonce,
       params.target,
       params.data,
@@ -86,7 +87,8 @@ export class OmniKeyClient {
     const payload: RelayPayload = {
       message: messageHex,
       signature,
-      nonce: typeof params.nonce === "bigint" ? Number(params.nonce) : params.nonce,
+      nonce: nonce.toString(),
+      chainId: (typeof params.chainId === "bigint" ? params.chainId : BigInt(params.chainId)).toString(),
       smartAccount,
       target: params.target,
       data: params.data,

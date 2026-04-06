@@ -27,6 +27,22 @@ export default function Home() {
   }, [mounted, unisatAvailable]);
 
   useEffect(() => {
+    if (!mounted || !unisatAvailable || typeof window === "undefined") return;
+    const unisat = (window as unknown as { unisat?: { on?: (event: string, cb: (...args: any[]) => void) => void; removeListener?: (event: string, cb: (...args: any[]) => void) => void } }).unisat;
+    if (!unisat?.on) return;
+
+    const handler = (accounts: string[] | undefined) => {
+      const next = accounts && accounts.length > 0 ? accounts[0] : null;
+      setAddress(next);
+    };
+
+    unisat.on("accountsChanged", handler);
+    return () => {
+      unisat.removeListener?.("accountsChanged", handler);
+    };
+  }, [mounted, unisatAvailable]);
+
+  useEffect(() => {
     if (!address) {
       setOwnerAddress(null);
       return;

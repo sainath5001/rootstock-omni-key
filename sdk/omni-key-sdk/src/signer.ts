@@ -8,6 +8,7 @@ import type { RelayPayload, RelayResponse } from "./types";
  */
 export function buildPayloadHash(
   smartAccount: string,
+  chainId: bigint | number | string,
   nonce: bigint | number | string,
   target: string,
   data: string,
@@ -16,10 +17,11 @@ export function buildPayloadHash(
   const messageBytes =
     messageHex.startsWith("0x") ? messageHex : ethers.hexlify(ethers.toUtf8Bytes(messageHex));
   const hashedMessage = ethers.keccak256(messageBytes);
+  const chainIdBigInt = typeof chainId === "bigint" ? chainId : BigInt(chainId);
   const nonceBigInt = typeof nonce === "bigint" ? nonce : BigInt(nonce);
   return ethers.solidityPackedKeccak256(
-    ["address", "uint256", "address", "bytes", "bytes32"],
-    [smartAccount, nonceBigInt, target, data, hashedMessage]
+    ["address", "uint256", "uint256", "address", "bytes", "bytes32"],
+    [smartAccount, chainIdBigInt, nonceBigInt, target, data, hashedMessage]
   );
 }
 
@@ -29,12 +31,13 @@ export function buildPayloadHash(
  */
 export function getMessageToSign(
   smartAccount: string,
+  chainId: bigint | number | string,
   nonce: bigint | number | string,
   target: string,
   data: string,
   messageHex: string
 ): string {
-  return buildPayloadHash(smartAccount, nonce, target, data, messageHex);
+  return buildPayloadHash(smartAccount, chainId, nonce, target, data, messageHex);
 }
 
 /**
@@ -67,7 +70,8 @@ export async function relayTransaction(
     body: JSON.stringify({
       message: payload.message,
       signature: payload.signature,
-      nonce: typeof payload.nonce === "bigint" ? Number(payload.nonce) : payload.nonce,
+      nonce: payload.nonce,
+      chainId: payload.chainId,
       smartAccount: payload.smartAccount,
       target: payload.target,
       data: payload.data,

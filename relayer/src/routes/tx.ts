@@ -49,9 +49,19 @@ function parseNonce(v: unknown): number | string {
   throw new Error("nonce must be a non-negative integer or string");
 }
 
+function parseChainId(v: unknown): number | string {
+  if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+  if (typeof v === "string") {
+    const n = parseInt(v, 10);
+    if (Number.isInteger(n) && n > 0) return n;
+    if (/^\d+$/.test(v)) return v;
+  }
+  throw new Error("chainId must be a positive integer or string");
+}
+
 /**
  * POST /relay
- * Body: { message, signature, nonce, smartAccount?, target, data }
+ * Body: { message, signature, nonce, chainId, smartAccount?, target, data }
  * smartAccount is optional if SMART_ACCOUNT_ADDRESS is set in env.
  */
 router.post("/relay", async (req: Request, res: Response): Promise<void> => {
@@ -65,6 +75,7 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
     const message = body.message;
     const signature = body.signature;
     const nonce = body.nonce;
+    const chainId = body.chainId;
     const smartAccount = body.smartAccount ?? config.smartAccountAddress;
     const target = body.target;
     const data = body.data;
@@ -75,6 +86,10 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
     }
     if (typeof signature !== "string" || !signature) {
       res.status(400).json({ error: "signature is required and must be a hex string (0x...)" });
+      return;
+    }
+    if (chainId === undefined || chainId === null) {
+      res.status(400).json({ error: "chainId is required (e.g. 31 for Rootstock testnet, 30 for mainnet)" });
       return;
     }
     if (target === undefined || target === null) {
@@ -126,10 +141,19 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    let chainIdValue: number | string;
+    try {
+      chainIdValue = parseChainId(chainId);
+    } catch {
+      res.status(400).json({ error: "chainId must be a positive integer" });
+      return;
+    }
+
     const params: RelayParams = {
       message: messageHex,
       signature: signatureHex,
       nonce: nonceValue,
+      chainId: chainIdValue,
       smartAccount,
       target,
       data: dataHex,
@@ -152,10 +176,11 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
     const isRpc =
       full.includes("detect network") || full.includes("ECONNREFUSED") || full.includes("ENOTFOUND") ||
       full.includes("fetch") || full.includes("NETWORK_ERROR") || full.includes("ETIMEDOUT") || full.includes("ENETUNREACH") ||
+      full.includes("eth_getTransactionCount does not exist") || full.includes("method eth_getTransactionCount does not exist") ||
       code === "ETIMEDOUT" || code === "ENETUNREACH" || (typeof message === "string" && (message.includes("ETIMEDOUT") || message.includes("ENETUNREACH")));
     let errorMsg: string;
     if (isRpc)
-      errorMsg = "Rootstock RPC unreachable (timeout or network blocked). Try another RPC in relayer/.env: https://rootstock-testnet.drpc.org or https://public-node.testnet.rsk.co. Check firewall/VPN.";
+      errorMsg = "Rootstock RPC error. Your RPC must support standard EVM JSON-RPC methods (e.g. eth_getTransactionCount). Set ROOTSTOCK_RPC_URL in relayer/.env to https://public-node.testnet.rsk.co (testnet) or https://public-node.rsk.co (mainnet).";
     else if (isInvalidSig)
       errorMsg = "Invalid signature: the signer does not match the Smart Account owner. Deploy the SmartAccount with the Ethereum address derived from your Unisat (Bitcoin) public key. See repo README.";
     else if (isInvalidNonce)

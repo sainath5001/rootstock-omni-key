@@ -33,6 +33,8 @@ export interface OmniKeyClientConfig {
 export interface SignAndRelayParams {
   /** Message bytes (hex 0x... or base64). Treated as hex if starts with 0x. */
   message: string;
+  /** EVM chainId of the target chain (e.g. Rootstock testnet = 31, mainnet = 30). */
+  chainId: number | string | bigint;
   /** Target contract address. */
   target: string;
   /** Calldata (hex 0x...). */
@@ -49,7 +51,9 @@ export interface SignAndRelayParams {
 export interface RelayPayload {
   message: string;
   signature: string;
-  nonce: string | number;
+  /** Send as string to avoid BigInt->Number truncation. */
+  nonce: string;
+  chainId: string;
   smartAccount: string;
   target: string;
   data: string;

@@ -1,6 +1,7 @@
-import * as crypto from "crypto";
 import { ethers } from "ethers";
 import { config } from "../config";
+import { buildPayloadHash } from "omni-key-sdk";
+import { bitcoinMessageHash, bitcoinMessageHashNoVarint } from "../utils/bitcoin";
 
 const SMART_ACCOUNT_ABI = [
   "function verifyAndExecute(bytes calldata message, bytes calldata signature, uint256 nonce, address target, bytes calldata data) external returns (bytes memory)",
@@ -20,6 +21,7 @@ export interface RelayParams {
   message: string;   // hex (0x...)
   signature: string;  // hex (0x...)
   nonce: number | string;
+  chainId: number | string;
   smartAccount: string;
   target: string;
   data: string;      // hex (0x...)
@@ -43,40 +45,6 @@ function normalizeSignature(sigHex: string): string {
   const sHex = "0x" + sBig.toString(16).padStart(64, "0");
   const sNew = ethers.getBytes(sHex);
   return ethers.hexlify(ethers.concat([r, sNew, new Uint8Array([v])]));
-}
-
-/** Build payload hash (same as SDK/contract). */
-function buildPayloadHash(
-  smartAccount: string,
-  nonce: bigint,
-  target: string,
-  data: string,
-  messageHex: string
-): string {
-  const messageBytes = messageHex.startsWith("0x") ? messageHex : ethers.hexlify(ethers.toUtf8Bytes(messageHex));
-  const hashedMessage = ethers.keccak256(messageBytes);
-  return ethers.solidityPackedKeccak256(
-    ["address", "uint256", "address", "bytes", "bytes32"],
-    [smartAccount, nonce, target, data, hashedMessage]
-  );
-}
-
-/** Bitcoin signed message: prefix + varint(msgLen) + message, double SHA256. */
-function bitcoinMessageHash(messageUtf8: string): Buffer {
-  const magic = Buffer.from("\x18Bitcoin Signed Message:\n", "utf8");
-  const msgBuf = Buffer.from(messageUtf8, "utf8");
-  const len = msgBuf.length;
-  const lenVarint = len < 0xfd ? Buffer.from([len]) : Buffer.from([0xfd, len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff]);
-  const preimage = Buffer.concat([magic, lenVarint, msgBuf]);
-  return crypto.createHash("sha256").update(crypto.createHash("sha256").update(preimage).digest()).digest();
-}
-
-/** Alternative: some implementations use magic + message only (no varint for message). */
-function bitcoinMessageHashNoVarint(messageUtf8: string): Buffer {
-  const magic = Buffer.from("\x18Bitcoin Signed Message:\n", "utf8");
-  const msgBuf = Buffer.from(messageUtf8, "utf8");
-  const preimage = Buffer.concat([magic, msgBuf]);
-  return crypto.createHash("sha256").update(crypto.createHash("sha256").update(preimage).digest()).digest();
 }
 
 /** Decode Unisat base64 signature to r, s, recoveryId. */
@@ -132,6 +100,7 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
   const messageBytes = ethers.getBytes(params.message);
   const dataBytes = ethers.getBytes(params.data);
   const nonceBigInt = typeof params.nonce === "string" ? BigInt(params.nonce) : BigInt(params.nonce);
+  const chainIdBigInt = typeof params.chainId === "string" ? BigInt(params.chainId) : BigInt(params.chainId);
 
   const signatureHex = params.signature.startsWith("0x")
     ? params.signature
@@ -153,19 +122,16 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
       dataBytes
     );
     const receipt = await tx.wait();
-    if (!receipt?.hash) throw new Error("Transaction sent but no hash in receipt");
-    return { txHash: receipt.hash };
+    const txHash = (receipt as { hash?: string; transactionHash?: string } | null)?.hash ?? (receipt as { transactionHash?: string } | null)?.transactionHash;
+    if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
+    return { txHash };
   } catch (err: unknown) {
     const errData = err && typeof err === "object" && "info" in err ? (err as { info?: { error?: { data?: string } } }).info?.error?.data : undefined;
     const dataStr = typeof errData === "string" ? errData : "";
-    const isRevertFromVerify =
-      dataStr === "0x8baa579f" ||
-      dataStr === "0xf645eedf" ||
-      dataStr.startsWith("0x8baa579f") ||
-      dataStr.startsWith("0xf645eedf") ||
-      (err instanceof Error && (err.message.includes("InvalidSignature") || err.message.includes("revert")));
+    const isInvalidSigSelector =
+      dataStr === "0x8baa579f" || dataStr.startsWith("0x8baa579f") || (err instanceof Error && err.message.includes("InvalidSignature"));
 
-    if (!isRevertFromVerify) throw err;
+    if (!isInvalidSigSelector) throw err;
 
     const relayerAddr = await smartAccount.relayer();
     if (relayerAddr === ethers.ZeroAddress) {
@@ -178,6 +144,7 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
 
     const payloadHash = buildPayloadHash(
       params.smartAccount,
+      chainIdBigInt,
       nonceBigInt,
       params.target,
       params.data,
@@ -199,7 +166,8 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
 
     const tx = await smartAccount.executeByRelayer(nonceBigInt, params.target, dataBytes);
     const receipt = await tx.wait();
-    if (!receipt?.hash) throw new Error("Transaction sent but no hash in receipt");
-    return { txHash: receipt.hash };
+    const txHash = (receipt as { hash?: string; transactionHash?: string } | null)?.hash ?? (receipt as { transactionHash?: string } | null)?.transactionHash;
+    if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
+    return { txHash };
   }
 }

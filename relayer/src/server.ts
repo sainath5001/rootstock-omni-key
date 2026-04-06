@@ -1,13 +1,31 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import txRoutes from "./routes/tx";
 import { config } from "./config";
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // allow curl/postman/no-origin
+      if (config.corsOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("CORS blocked: origin not allowed"));
+    },
+  })
+);
 app.use(express.json({ limit: "64kb" }));
+
+app.use(
+  rateLimit({
+    windowMs: config.rateLimitWindowMs,
+    max: config.rateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
 
 app.use("/", txRoutes);
 

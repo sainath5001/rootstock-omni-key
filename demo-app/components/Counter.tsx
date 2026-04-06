@@ -7,15 +7,15 @@ interface CounterProps {
 }
 
 export function Counter({ isConnected, ownerAddress }: CounterProps) {
-  const [value, setValue] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [value, setValue] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"idle" | "signing" | "submitting" | "confirmed">("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCounter = useCallback(async () => {
     try {
       const v = await getCounterValue();
-      setValue(Number(v));
+      setValue(v.toString());
     } catch {
       setValue(null);
     }
@@ -30,12 +30,14 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
 
   const handleIncrement = async () => {
     if (!isConnected) return;
-    setLoading(true);
+    setPhase("signing");
     setError(null);
     setTxHash(null);
     try {
+      setPhase("submitting");
       const hash = await incrementCounter();
       setTxHash(hash);
+      setPhase("confirmed");
       await fetchCounter();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -47,7 +49,7 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
         setError(msg);
       }
     } finally {
-      setLoading(false);
+      setPhase((p) => (p === "confirmed" ? "idle" : "idle"));
     }
   };
 
@@ -65,11 +67,27 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
       </div>
       <button
         onClick={handleIncrement}
-        disabled={loading}
+        disabled={phase === "signing" || phase === "submitting"}
+        aria-busy={phase === "signing" || phase === "submitting"}
         className="w-full rounded-lg bg-[#F7931A] px-5 py-3 font-medium text-[#0B0F1A] transition-all duration-200 hover:bg-[#FF9F2E] hover:shadow-md hover:shadow-[#F7931A]/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-none"
       >
-        {loading ? "Signing & sending…" : "Increment Counter"}
+        {phase === "signing"
+          ? "Awaiting signature…"
+          : phase === "submitting"
+            ? "Submitting transaction…"
+            : phase === "confirmed"
+              ? "Confirmed"
+              : "Increment Counter"}
       </button>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {phase === "signing"
+          ? "Awaiting wallet signature."
+          : phase === "submitting"
+            ? "Submitting transaction."
+            : phase === "confirmed"
+              ? "Transaction confirmed."
+              : ""}
+      </div>
       {txHash && (
         <p className="text-sm text-[#8A94A6]">
           Tx:{" "}
@@ -83,7 +101,11 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
           </a>
         </p>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

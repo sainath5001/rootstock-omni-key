@@ -3,17 +3,26 @@
  */
 
 import { ethers } from "ethers";
-import { OmniKeyClient, detectUnisat } from "omni-key-sdk";
+import { OmniKeyClient, detectUnisat, getMessageToSign, signMessage, relayTransaction } from "omni-key-sdk";
 
 const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3001";
 const SMART_ACCOUNT = process.env.NEXT_PUBLIC_SMART_ACCOUNT_ADDRESS || "";
 const COUNTER_ADDRESS = process.env.NEXT_PUBLIC_COUNTER_ADDRESS || "";
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://public-node.testnet.rsk.co";
+const CHAIN_ID = RPC_URL.includes("testnet") ? 31 : 30;
 
 const SMART_ACCOUNT_ABI = ["function nonce() view returns (uint256)"];
 const COUNTER_ABI = ["function counter() view returns (uint256)", "function increment()"];
 
 let omniClient: OmniKeyClient | null = null;
+let provider: ethers.JsonRpcProvider | null = null;
+
+function getProvider(): ethers.JsonRpcProvider {
+  if (!provider) {
+    provider = new ethers.JsonRpcProvider(RPC_URL);
+  }
+  return provider;
+}
 
 export function getOmniClient(): OmniKeyClient {
   if (typeof window === "undefined") {
@@ -70,28 +79,30 @@ export async function getOwnerAddress(): Promise<string | null> {
 }
 
 export async function getCounterValue(): Promise<bigint> {
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
-  const contract = new ethers.Contract(COUNTER_ADDRESS, COUNTER_ABI, provider);
+  const contract = new ethers.Contract(COUNTER_ADDRESS, COUNTER_ABI, getProvider());
   return contract.counter();
 }
 
 export async function getNonce(): Promise<bigint> {
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
-  const contract = new ethers.Contract(SMART_ACCOUNT, SMART_ACCOUNT_ABI, provider);
+  const contract = new ethers.Contract(SMART_ACCOUNT, SMART_ACCOUNT_ABI, getProvider());
   return contract.nonce();
 }
 
 const COUNTER_INTERFACE = new ethers.Interface(COUNTER_ABI);
 
 export async function incrementCounter(): Promise<string> {
-  const omni = getOmniClient();
   const nonce = await getNonce();
   const data = COUNTER_INTERFACE.encodeFunctionData("increment");
-  return omni.signAndRelay({
-    message: "increment counter",
+  const messageHex = "0x" + Array.from(new TextEncoder().encode("increment counter")).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const toSign = getMessageToSign(SMART_ACCOUNT, CHAIN_ID, nonce, COUNTER_ADDRESS, data, messageHex);
+  const signature = await signMessage(toSign);
+  return relayTransaction(RELAYER_URL, {
+    message: messageHex,
+    signature,
+    nonce: nonce.toString(),
+    chainId: CHAIN_ID.toString(),
+    smartAccount: SMART_ACCOUNT,
     target: COUNTER_ADDRESS,
     data,
-    nonce,
-    smartAccount: SMART_ACCOUNT || undefined,
   });
 }

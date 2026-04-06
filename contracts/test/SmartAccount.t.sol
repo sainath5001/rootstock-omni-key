@@ -9,10 +9,12 @@ contract SmartAccountTest is Test {
     SmartAccount smartAccount;
     Counter counter;
     address owner;
+    address relayer;
 
     function setUp() public {
         owner = vm.addr(1);
-        smartAccount = new SmartAccount(owner, address(0));
+        relayer = vm.addr(9);
+        smartAccount = new SmartAccount(owner, relayer);
         counter = new Counter();
     }
 
@@ -23,7 +25,14 @@ contract SmartAccountTest is Test {
         bytes memory data
     ) internal view returns (bytes32) {
         bytes32 payloadHash = keccak256(
-            abi.encodePacked(address(smartAccount), _nonce, target, data, keccak256(message))
+            abi.encodePacked(
+                address(smartAccount),
+                block.chainid,
+                _nonce,
+                target,
+                data,
+                keccak256(message)
+            )
         );
         return
             keccak256(
@@ -91,6 +100,20 @@ contract SmartAccountTest is Test {
             address(counter),
             data
         );
+    }
+
+    function testExecuteByRelayer_RevertsForNonRelayer() public {
+        bytes memory data = abi.encodeWithSelector(counter.increment.selector);
+        vm.expectRevert(SmartAccount.NotRelayer.selector);
+        smartAccount.executeByRelayer(0, address(counter), data);
+    }
+
+    function testExecuteByRelayer_WorksForRelayer() public {
+        bytes memory data = abi.encodeWithSelector(counter.increment.selector);
+        vm.prank(relayer);
+        smartAccount.executeByRelayer(0, address(counter), data);
+        assertEq(counter.counter(), 1);
+        assertEq(smartAccount.nonce(), 1);
     }
 }
 
