@@ -8,7 +8,7 @@ Backend service that receives signed meta-transactions from clients and submits 
 - **Gas**: The relayer wallet (configured via `RELAYER_PRIVATE_KEY`) pays all gas for relayed transactions.
 - **Two paths**:
   1. **Ethereum path**: Calls `SmartAccount.verifyAndExecute(...)`. Use when the client signs with Ethereum `personal_sign` (e.g. MetaMask).
-  2. **Unisat path**: If the contract reverts with `InvalidSignature`, the relayer verifies the signature off-chain using the Bitcoin signed-message format, confirms the signer matches the SmartAccount `owner`, then calls `SmartAccount.executeByRelayer(nonce, target, data)`. Use when the client signs with Unisat (Bitcoin-style).
+  2. **Unisat path**: If the contract reverts with `InvalidSignature`, the relayer verifies the signature off-chain using the Bitcoin signed-message format, confirms the signer matches the SmartAccount `owner`, then calls `SmartAccount.executeByRelayer(nonce, target, data, message, bitcoinSig)`. Use when the client signs with Unisat (Bitcoin-style).
 
 The relayer does not change client or contract logic; it only submits valid requests and normalizes errors for the client.
 
@@ -50,7 +50,7 @@ cp .env.example .env
 **Security**
 
 - Never commit `.env` or expose `RELAYER_PRIVATE_KEY`.
-- In production, restrict CORS and consider rate limiting and authentication for `POST /relay`.
+- In production, restrict CORS and set `RELAYER_API_KEY` so `POST /relay` requires `X-Relayer-API-Key`.
 
 ## Running the relayer
 
@@ -130,7 +130,7 @@ The relayer returns user-friendly messages for common cases (e.g. invalid signat
 1. Client builds the same payload hash as the SmartAccount (see SDK).
 2. Client signs with Unisat (Bitcoin-style); sends `message`, `signature` (base64), `nonce`, `smartAccount`, `target`, `data` to `POST /relay`.
 3. Relayer calls `SmartAccount.verifyAndExecute(...)`. Contract reverts with `InvalidSignature` (Unisat does not use Ethereum `personal_sign`).
-4. Relayer loads `SmartAccount.relayer()` and `SmartAccount.owner()`. If relayer is set, it verifies the signature off-chain (Bitcoin message format), checks recovered address == `owner`, then calls `SmartAccount.executeByRelayer(nonce, target, data)`.
+4. Relayer loads `SmartAccount.relayer()` and `SmartAccount.owner()`. If relayer is set, it verifies the signature off-chain (Bitcoin message format), checks recovered address == `owner`, then calls `SmartAccount.executeByRelayer(nonce, target, data, message, bitcoinSig)`.
 5. Relayer returns `txHash` to the client.
 
 The SmartAccount must be deployed with `relayer` set to this relayer’s wallet address (same as the one for `RELAYER_PRIVATE_KEY`) for the Unisat path to work.

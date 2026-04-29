@@ -73,7 +73,7 @@ contract SmartAccount {
         bytes32 payloadHash = _payloadHash(_nonce, target, data, message);
         bytes32 ethSignedHash = payloadHash.toEthSignedMessageHash();
 
-        address recovered = ECDSA.recoverCalldata(ethSignedHash, signature);
+        address recovered = ECDSA.recover(ethSignedHash, signature);
         if (recovered != owner) {
             revert InvalidSignature();
         }

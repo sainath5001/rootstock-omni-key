@@ -38,6 +38,8 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
       setTxHash(hash);
       setPhase("confirmed");
       await fetchCounter();
+      // Keep "confirmed" visible briefly before resetting.
+      setTimeout(() => setPhase("idle"), 1500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === "Failed to fetch" || msg.includes("fetch")) {
@@ -47,7 +49,6 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
       } else {
         setError(msg);
       }
-    } finally {
       setPhase("idle");
     }
   };

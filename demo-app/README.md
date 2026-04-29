@@ -121,7 +121,6 @@ demo-app/
 ├── .env.example
 ├── .env.local         # Your config (do not commit)
 ├── package.json
-├── tailwind.config.js
 └── postcss.config.js
 ```
 
@@ -142,7 +141,7 @@ demo-app/
 - **Env** – Keep relayer, RPC, and contract addresses in `NEXT_PUBLIC_*` and read them in `services/omni.ts` (or your own config module).
 - **SDK** – The demo uses `OmniKeyClient` from `omni-key-sdk`: connect, `getOwnerAddress`, and `signAndRelay`. For other actions, still use `getNonce()` from the SmartAccount and encode your own `target`/`data` in `signAndRelay`.
 - **Unisat only** – The UI explicitly states that only Unisat is used; MetaMask connection errors from other extensions can be ignored. You can reuse this pattern in your dApp.
-- **Styling** – Tailwind with a dark theme and Rootstock-style orange accents. Adjust `tailwind.config.js` and `styles/globals.css` to match your branding.
+- **Styling** – Tailwind with a dark theme and Rootstock-style orange accents. Adjust `styles/globals.css` (and Tailwind CSS tokens) to match your branding.
 
 ## Troubleshooting
 

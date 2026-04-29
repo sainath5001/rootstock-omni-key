@@ -11,6 +11,22 @@ const SMART_ACCOUNT_IFACE = new ethers.Interface([
 ]);
 const INVALID_SIGNATURE_SELECTOR = SMART_ACCOUNT_IFACE.getError("InvalidSignature")!.selector;
 const INVALID_NONCE_SELECTOR = SMART_ACCOUNT_IFACE.getError("InvalidNonce")!.selector;
+type AccountRateEntry = { windowStartedAt: number; count: number };
+const accountRate = new Map<string, AccountRateEntry>();
+
+function checkAccountQuota(account: string): boolean {
+  const now = Date.now();
+  const key = account.toLowerCase();
+  const current = accountRate.get(key);
+  if (!current || now - current.windowStartedAt >= config.rateLimitWindowMs) {
+    accountRate.set(key, { windowStartedAt: now, count: 1 });
+    return true;
+  }
+  if (current.count >= config.accountRateLimitMax) return false;
+  current.count += 1;
+  accountRate.set(key, current);
+  return true;
+}
 
 function requireRelayApiKey(req: Request, res: Response, next: NextFunction): void {
   if (!config.relayerApiKey) {
@@ -153,6 +169,12 @@ router.post("/relay", requireRelayApiKey, async (req: Request, res: Response): P
     }
     if (!isAddress(smartAccount) || !isAddress(target)) {
       res.status(400).json({ error: "smartAccount and target must be valid Ethereum addresses" });
+      return;
+    }
+    if (!checkAccountQuota(smartAccount)) {
+      res.status(429).json({
+        error: `Rate limit exceeded for smartAccount. Try again later (max ${config.accountRateLimitMax} per ${config.rateLimitWindowMs}ms).`,
+      });
       return;
     }
 

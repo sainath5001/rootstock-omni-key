@@ -67,6 +67,12 @@ export default function Home() {
         <title>Omni Counter – Rootstock Omni-Key</title>
         <meta name="description" content="Bitcoin wallet controls a Rootstock smart contract" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta property="og:title" content="Omni Counter – Rootstock Omni-Key" />
+        <meta property="og:description" content="Bitcoin wallet controls a Rootstock smart contract" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Omni Counter – Rootstock Omni-Key" />
+        <meta name="twitter:description" content="Bitcoin wallet controls a Rootstock smart contract" />
       </Head>
       <main className="min-h-screen bg-[#0B0F1A] px-4 py-10 sm:px-6 sm:py-14">
         <div className="mx-auto max-w-md">

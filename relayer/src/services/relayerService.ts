@@ -9,6 +9,8 @@ const SMART_ACCOUNT_ABI = [
   "function owner() view returns (address)",
   "function relayer() view returns (address)",
 ] as const;
+const SMART_ACCOUNT_ERRORS_IFACE = new ethers.Interface(["error InvalidSignature()"]);
+const INVALID_SIGNATURE_SELECTOR = SMART_ACCOUNT_ERRORS_IFACE.getError("InvalidSignature")!.selector;
 
 const ROOTSTOCK_TESTNET = { name: "rootstock-testnet", chainId: 31 };
 const ROOTSTOCK_MAINNET = { name: "rootstock", chainId: 30 };
@@ -26,13 +28,13 @@ export interface RelayParams {
   data: string;
 }
 
-function networkForChainId(chainId: bigint) {
+export function networkForChainId(chainId: bigint) {
   if (chainId === 31n) return ROOTSTOCK_TESTNET;
   if (chainId === 30n) return ROOTSTOCK_MAINNET;
   throw new Error(`Unsupported chainId ${chainId}; expected 31 (RSK testnet) or 30 (RSK mainnet)`);
 }
 
-function normalizeSignature(sigHex: string): string {
+export function normalizeSignature(sigHex: string): string {
   const bytes = ethers.getBytes(sigHex);
   if (bytes.length !== 65) return sigHex;
   const r = bytes.slice(0, 32);
@@ -48,7 +50,7 @@ function normalizeSignature(sigHex: string): string {
   return ethers.hexlify(ethers.concat([r, sNew, new Uint8Array([v])]));
 }
 
-function decodeUnisatSignature(base64Sig: string): { r: string; s: string; recoveryId: number } {
+export function decodeUnisatSignature(base64Sig: string): { r: string; s: string; recoveryId: number } {
   const buf = Buffer.from(base64Sig, "base64");
   if (buf.length !== 65) throw new Error("Unisat signature must be 65 bytes");
   const recoveryId = buf[0];
@@ -57,7 +59,7 @@ function decodeUnisatSignature(base64Sig: string): { r: string; s: string; recov
   return { r, s, recoveryId };
 }
 
-function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: string, expectedOwner: string): void {
+export function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: string, expectedOwner: string): void {
   const { r, s, recoveryId } = decodeUnisatSignature(signatureBase64);
   const v1 = 27 + (recoveryId & 1);
   const v2 = 28 - (recoveryId & 1);
@@ -85,7 +87,7 @@ function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: strin
 }
 
 /** 65-byte Unisat layout as hex for contract executeByRelayer. */
-function bitcoinSig65Hex(signatureHex: string, originalSignature: string): string {
+export function bitcoinSig65Hex(signatureHex: string, originalSignature: string): string {
   const fromHex = ethers.getBytes(signatureHex);
   if (fromHex.length === 65) return signatureHex;
   const raw = originalSignature.trim();
@@ -139,7 +141,9 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
     const errData = err && typeof err === "object" && "info" in err ? (err as { info?: { error?: { data?: string } } }).info?.error?.data : undefined;
     const dataStr = typeof errData === "string" ? errData : "";
     const isInvalidSigSelector =
-      dataStr === "0x8baa579f" || dataStr.startsWith("0x8baa579f") || (err instanceof Error && err.message.includes("InvalidSignature"));
+      dataStr === INVALID_SIGNATURE_SELECTOR ||
+      dataStr.startsWith(INVALID_SIGNATURE_SELECTOR) ||
+      (err instanceof Error && err.message.includes("InvalidSignature"));
 
     if (!isInvalidSigSelector) throw err;
 

@@ -11,18 +11,14 @@ const SMART_ACCOUNT = process.env.NEXT_PUBLIC_SMART_ACCOUNT_ADDRESS || "";
 const COUNTER_ADDRESS = process.env.NEXT_PUBLIC_COUNTER_ADDRESS || "";
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://public-node.testnet.rsk.co";
 const CHAIN_ID_RAW = process.env.NEXT_PUBLIC_CHAIN_ID;
-const CHAIN_ID =
-  CHAIN_ID_RAW && /^\d+$/.test(CHAIN_ID_RAW.trim())
-    ? parseInt(CHAIN_ID_RAW.trim(), 10)
-    : RPC_URL.includes("testnet")
-      ? 31
-      : 30;
+const CHAIN_ID_CONFIGURED = CHAIN_ID_RAW && /^\d+$/.test(CHAIN_ID_RAW.trim()) ? parseInt(CHAIN_ID_RAW.trim(), 10) : null;
 
 const SMART_ACCOUNT_ABI = ["function nonce() view returns (uint256)"];
 const COUNTER_ABI = ["function counter() view returns (uint256)", "function increment()"];
 
 let omniClient: OmniKeyClient | null = null;
 let provider: ethers.JsonRpcProvider | null = null;
+let chainIdCache: number | null = CHAIN_ID_CONFIGURED;
 
 function getProvider(): ethers.JsonRpcProvider {
   if (typeof window === "undefined") {
@@ -63,14 +59,23 @@ export function getConfig() {
     smartAccountAddress: SMART_ACCOUNT,
     counterAddress: COUNTER_ADDRESS,
     rpcUrl: RPC_URL,
-    chainId: CHAIN_ID,
+    chainId: CHAIN_ID_CONFIGURED ?? 31,
   };
 }
 
 export function getExplorerTxUrl(txHash: string): string {
   const base =
-    CHAIN_ID === 31 ? "https://explorer.testnet.rootstock.io/tx/" : "https://explorer.rootstock.io/tx/";
+    (CHAIN_ID_CONFIGURED ?? 31) === 31
+      ? "https://explorer.testnet.rootstock.io/tx/"
+      : "https://explorer.rootstock.io/tx/";
   return `${base}${txHash}`;
+}
+
+async function getChainId(): Promise<number> {
+  if (chainIdCache !== null) return chainIdCache;
+  const network = await getProvider().getNetwork();
+  chainIdCache = Number(network.chainId);
+  return chainIdCache;
 }
 
 /** True if Unisat extension is available. This app does not use MetaMask. */
@@ -130,17 +135,18 @@ const COUNTER_INTERFACE = new ethers.Interface(COUNTER_ABI);
  */
 export async function incrementCounter(onSubmitting?: () => void): Promise<string> {
   assertContractConfig();
+  const chainId = await getChainId();
   const nonce = await getNonce();
   const data = COUNTER_INTERFACE.encodeFunctionData("increment");
   const messageHex = ethers.hexlify(ethers.toUtf8Bytes("increment counter"));
-  const toSign = getMessageToSign(SMART_ACCOUNT, CHAIN_ID, nonce, COUNTER_ADDRESS, data, messageHex);
+  const toSign = getMessageToSign(SMART_ACCOUNT, chainId, nonce, COUNTER_ADDRESS, data, messageHex);
   const signature = await signMessage(toSign);
   onSubmitting?.();
   return relayTransaction(RELAYER_URL, {
     message: messageHex,
     signature,
     nonce: nonce.toString(),
-    chainId: CHAIN_ID.toString(),
+    chainId: chainId.toString(),
     smartAccount: SMART_ACCOUNT,
     target: COUNTER_ADDRESS,
     data,

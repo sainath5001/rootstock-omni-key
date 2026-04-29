@@ -11,6 +11,14 @@ contract SmartAccountTest is Test {
     Counter counter;
     address owner;
     address relayer;
+    event Executed(
+        address indexed owner,
+        address indexed recoveredSigner,
+        address indexed target,
+        uint256 nonce,
+        bytes data,
+        bytes result
+    );
 
     function setUp() public {
         owner = vm.addr(1);
@@ -168,6 +176,8 @@ contract SmartAccountTest is Test {
         bytes memory data = abi.encodeWithSelector(counter.increment.selector);
         bytes memory sig = _bitcoinSig65(1, message, 0, address(counter), data);
         vm.prank(relayer);
+        vm.expectEmit(true, true, true, false);
+        emit Executed(owner, owner, address(counter), 0, data, "");
         smartAccount.executeByRelayer(0, address(counter), data, message, sig);
         assertEq(counter.counter(), 1);
         assertEq(smartAccount.nonce(), 1);

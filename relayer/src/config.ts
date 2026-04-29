@@ -48,6 +48,8 @@ export const config = {
   corsOrigins: getEnvList("CORS_ORIGINS", "http://localhost:3000"),
   rateLimitWindowMs: parsePositiveInt("RATE_LIMIT_WINDOW_MS", "60000"),
   rateLimitMax: parsePositiveInt("RATE_LIMIT_MAX", "30"),
+  /** Additional quota per smartAccount (owner account) to reduce drain risk across rotating IPs. */
+  accountRateLimitMax: parsePositiveInt("ACCOUNT_RATE_LIMIT_MAX", "20"),
   /** If set, POST /relay requires header X-Relayer-API-Key (or Authorization: Bearer …). */
   relayerApiKey: getEnv("RELAYER_API_KEY", ""),
 };
