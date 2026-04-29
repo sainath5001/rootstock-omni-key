@@ -45,7 +45,9 @@ cp .env.example .env
 | `CORS_ORIGINS` | No | Comma-separated allowlist of browser origins permitted to call the relayer. Default: `http://localhost:3000`. |
 | `RATE_LIMIT_WINDOW_MS` | No | Rate limit window size in ms. Default: `60000`. |
 | `RATE_LIMIT_MAX` | No | Max requests per window per IP. Default: `30`. |
+| `ACCOUNT_RATE_LIMIT_MAX` | No | Max requests per window per smartAccount. Default: `20`. |
 | `PORT` | No | HTTP server port. Default: `3001`. |
+| `RELAYER_API_KEY` | No | If set, `POST /relay` requires `X-Relayer-API-Key` (or `Authorization: Bearer ...`). |
 
 **Security**
 

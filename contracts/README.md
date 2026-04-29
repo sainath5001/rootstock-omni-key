@@ -40,7 +40,7 @@ forge build
 
 ### EVM version (Rootstock)
 
-Foundry is configured with `evm_version = "cancun"` and `via_ir = true` so the project compiles cleanly with OpenZeppelin v5 (transitive code may reference Cancun-only builtins). **Rootstock nodes follow a Paris-era execution rule set**; the contracts in this repo (`SmartAccount`, `Counter`, `BitcoinMessage`) avoid Cancun-only opcodes in their own bytecode. Still run a **dry-run deployment** against your target Rootstock RPC before production, and review bytecode if you add new dependencies.
+Foundry is configured with `evm_version = "paris"` and the contracts currently compile against OpenZeppelin `v5.0.2` for Rootstock compatibility. This aligns bytecode targeting with Rootstock's Paris-era execution rules and avoids Cancun-only builtins.
 
 ## Test
 
