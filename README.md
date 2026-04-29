@@ -57,7 +57,8 @@ const owner = await client.getOwnerAddress(); // deploy SmartAccount with this o
 2. **Start the relayer**  
    ```bash
    cd relayer && cp .env.example .env
-   # Edit .env: ROOTSTOCK_RPC_URL, RELAYER_PRIVATE_KEY, CORS_ORIGINS, rate limit (optional)
+   # Edit .env: ROOTSTOCK_RPC_URL, RELAYER_PRIVATE_KEY, CORS_ORIGINS,
+   # optional security/reliability knobs: RELAYER_API_KEY, ACCOUNT_RATE_LIMIT_MAX, RPC_MAX_RETRIES, RPC_RETRY_DELAY_MS
    npm install && npm run dev
    ```
    See [relayer/README.md](relayer/README.md).
