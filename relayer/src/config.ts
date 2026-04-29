@@ -22,23 +22,32 @@ function getEnvList(name: string, defaultValue: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+function parsePositiveInt(name: string, defaultValue: string): number {
+  const raw = getEnv(name, defaultValue);
+  const v = parseInt(raw, 10);
+  if (!Number.isFinite(v) || v <= 0) {
+    throw new Error(`${name} must be a positive integer (got "${raw}")`);
+  }
+  return v;
+}
+
+function parsePort(name: string, defaultValue: string): number {
+  const raw = getEnv(name, defaultValue);
+  const v = parseInt(raw, 10);
+  if (!Number.isFinite(v) || v < 1 || v > 65535) {
+    throw new Error(`${name} must be a TCP port 1–65535 (got "${raw}")`);
+  }
+  return v;
+}
+
 export const config = {
-  /** Rootstock RPC URL (testnet or mainnet). */
   rootstockRpcUrl: requireEnv("ROOTSTOCK_RPC_URL"),
-
-  /** Private key of the relayer wallet (pays gas). No 0x prefix. */
   relayerPrivateKey: requireEnv("RELAYER_PRIVATE_KEY"),
-
-  /** Default SmartAccount contract address if not provided in request. */
   smartAccountAddress: getEnv("SMART_ACCOUNT_ADDRESS", ""),
-
-  /** Server port. */
-  port: parseInt(getEnv("PORT", "3001"), 10),
-
-  /** Comma-separated allowlist of browser origins permitted to call the relayer. */
+  port: parsePort("PORT", "3001"),
   corsOrigins: getEnvList("CORS_ORIGINS", "http://localhost:3000"),
-
-  /** Rate limit: max requests per window per IP for funded endpoints. */
-  rateLimitWindowMs: parseInt(getEnv("RATE_LIMIT_WINDOW_MS", "60000"), 10),
-  rateLimitMax: parseInt(getEnv("RATE_LIMIT_MAX", "30"), 10),
+  rateLimitWindowMs: parsePositiveInt("RATE_LIMIT_WINDOW_MS", "60000"),
+  rateLimitMax: parsePositiveInt("RATE_LIMIT_MAX", "30"),
+  /** If set, POST /relay requires header X-Relayer-API-Key (or Authorization: Bearer …). */
+  relayerApiKey: getEnv("RELAYER_API_KEY", ""),
 };

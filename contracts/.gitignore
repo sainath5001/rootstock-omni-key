@@ -3,7 +3,7 @@ cache/
 out/
 
 # Foundry broadcast artifacts (may contain deployer/ops addresses)
-/broadcast/
+broadcast/
 
 # Docs
 docs/

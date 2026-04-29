@@ -1,4 +1,11 @@
-import { connectWallet as connectWalletFn, detectUnisat, getAddress, getOwnerAddress } from "./wallet";
+import { ethers } from "ethers";
+import {
+  connectWallet as connectWalletFn,
+  disconnectWallet as disconnectWalletImpl,
+  detectUnisat,
+  getAddress,
+  getOwnerAddress,
+} from "./wallet";
 import {
   getMessageToSign,
   signMessage as signMessageFn,
@@ -7,7 +14,7 @@ import {
 import type { OmniKeyClientConfig, SignAndRelayParams, RelayPayload, RelayResponse } from "./types";
 
 export type { OmniKeyClientConfig, SignAndRelayParams, RelayPayload, RelayResponse, UnisatProvider } from "./types";
-export { detectUnisat, getAddress, getOwnerAddress } from "./wallet";
+export { detectUnisat, disconnectWallet, getAddress, getOwnerAddress } from "./wallet";
 export { buildPayloadHash, getMessageToSign } from "./signer";
 export { connectWalletFn as connectWallet, signMessageFn as signMessage, relayTransactionFn as relayTransaction };
 
@@ -18,9 +25,12 @@ export class OmniKeyClient {
   private readonly relayerUrl: string;
   private readonly defaultSmartAccount?: string;
 
+  private readonly relayerApiKey?: string;
+
   constructor(config: OmniKeyClientConfig) {
     this.relayerUrl = config.relayerUrl.replace(/\/$/, "");
     this.defaultSmartAccount = config.smartAccountAddress;
+    this.relayerApiKey = config.relayerApiKey;
   }
 
   /**
@@ -35,6 +45,11 @@ export class OmniKeyClient {
    */
   async connectWallet(): Promise<string> {
     return connectWalletFn();
+  }
+
+  /** Calls Unisat `disconnect()` when available. */
+  async disconnectWallet(): Promise<void> {
+    return disconnectWalletImpl();
   }
 
   /**
@@ -69,8 +84,9 @@ export class OmniKeyClient {
       throw new Error("smartAccount is required (pass in params or in OmniKeyClient config)");
     }
 
-    const messageHex =
-      params.message.startsWith("0x") ? params.message : "0x" + Array.from(new TextEncoder().encode(params.message)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const messageHex = params.message.startsWith("0x")
+      ? params.message
+      : ethers.hexlify(ethers.toUtf8Bytes(params.message));
 
     const nonce = typeof params.nonce === "bigint" ? params.nonce : BigInt(params.nonce);
     const toSign = getMessageToSign(
@@ -92,6 +108,7 @@ export class OmniKeyClient {
       smartAccount,
       target: params.target,
       data: params.data,
+      relayerApiKey: this.relayerApiKey,
     };
 
     return relayTransactionFn(this.relayerUrl, payload);

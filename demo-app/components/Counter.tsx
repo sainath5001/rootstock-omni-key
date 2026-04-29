@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { getCounterValue, incrementCounter } from "../services/omni";
+import { getCounterValue, incrementCounter, getExplorerTxUrl } from "../services/omni";
 
 interface CounterProps {
   isConnected: boolean;
@@ -34,8 +34,7 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
     setError(null);
     setTxHash(null);
     try {
-      setPhase("submitting");
-      const hash = await incrementCounter();
+      const hash = await incrementCounter(() => setPhase("submitting"));
       setTxHash(hash);
       setPhase("confirmed");
       await fetchCounter();
@@ -49,7 +48,7 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
         setError(msg);
       }
     } finally {
-      setPhase((p) => (p === "confirmed" ? "idle" : "idle"));
+      setPhase("idle");
     }
   };
 
@@ -66,9 +65,9 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
         <span className="text-4xl font-semibold text-white tabular-nums">{value !== null ? value : "—"}</span>
       </div>
       <button
+        type="button"
         onClick={handleIncrement}
         disabled={phase === "signing" || phase === "submitting"}
-        aria-busy={phase === "signing" || phase === "submitting"}
         className="w-full rounded-lg bg-[#F7931A] px-5 py-3 font-medium text-[#0B0F1A] transition-all duration-200 hover:bg-[#FF9F2E] hover:shadow-md hover:shadow-[#F7931A]/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-none"
       >
         {phase === "signing"
@@ -92,12 +91,13 @@ export function Counter({ isConnected, ownerAddress }: CounterProps) {
         <p className="text-sm text-[#8A94A6]">
           Tx:{" "}
           <a
-            href={`https://explorer.testnet.rootstock.io/tx/${txHash}`}
+            href={getExplorerTxUrl(txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#00D1FF] hover:text-[#33DAFF] underline"
+            aria-label={`View transaction ${txHash} on Rootstock explorer`}
           >
-            {txHash.slice(0, 10)}…
+            {txHash.slice(0, 8)}…{txHash.slice(-6)}
           </a>
         </p>
       )}

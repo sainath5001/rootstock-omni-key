@@ -27,21 +27,29 @@ export default function Home() {
       .catch(() => setAddress(null));
   }, [mounted, unisatAvailable]);
 
+  const onAccountsChanged = useCallback((...args: unknown[]) => {
+    const accounts = args[0] as string[] | undefined;
+    const next = accounts && accounts.length > 0 ? accounts[0] : null;
+    setAddress(next);
+  }, []);
+
   useEffect(() => {
     if (!mounted || !unisatAvailable || typeof window === "undefined") return;
-    const unisat = (window as unknown as { unisat?: { on?: (event: string, cb: (...args: any[]) => void) => void; removeListener?: (event: string, cb: (...args: any[]) => void) => void } }).unisat;
+    const unisat = (window as unknown as {
+      unisat?: {
+        on?: (event: string, cb: (...args: unknown[]) => void) => void;
+        removeListener?: (event: string, cb: (...args: unknown[]) => void) => void;
+        off?: (event: string, cb: (...args: unknown[]) => void) => void;
+      };
+    }).unisat;
     if (!unisat?.on) return;
 
-    const handler = (accounts: string[] | undefined) => {
-      const next = accounts && accounts.length > 0 ? accounts[0] : null;
-      setAddress(next);
-    };
-
-    unisat.on("accountsChanged", handler);
+    unisat.on("accountsChanged", onAccountsChanged);
     return () => {
-      unisat.removeListener?.("accountsChanged", handler);
+      const rm = unisat.removeListener ?? unisat.off;
+      rm?.call(unisat, "accountsChanged", onAccountsChanged);
     };
-  }, [mounted, unisatAvailable]);
+  }, [mounted, unisatAvailable, onAccountsChanged]);
 
   useEffect(() => {
     if (!address) {
@@ -79,7 +87,12 @@ export default function Home() {
             </div>
           )}
           <div className="rounded-xl border border-[#2D3748] bg-[#1B2330] p-6 shadow-lg transition-shadow hover:shadow-[0_8px_32px_rgba(247,147,26,0.08)]">
-            <ConnectWallet onConnect={handleConnect} connectedAddress={address} unisatAvailable={unisatAvailable} />
+            <ConnectWallet
+              onConnect={handleConnect}
+              onDisconnect={() => setAddress(null)}
+              connectedAddress={address}
+              unisatAvailable={unisatAvailable}
+            />
             {ownerAddress && (
               <p className="mt-4 mb-4 text-xs text-[#8A94A6] break-all">
                 SmartAccount must be deployed with owner: <code className="rounded bg-[#0B0F1A] px-1.5 py-0.5 font-mono text-[11px] text-[#00D1FF]">{ownerAddress}</code>

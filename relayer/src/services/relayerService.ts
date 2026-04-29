@@ -5,32 +5,33 @@ import { bitcoinMessageHash, bitcoinMessageHashNoVarint } from "../utils/bitcoin
 
 const SMART_ACCOUNT_ABI = [
   "function verifyAndExecute(bytes calldata message, bytes calldata signature, uint256 nonce, address target, bytes calldata data) external returns (bytes memory)",
-  "function executeByRelayer(uint256 nonce, address target, bytes calldata data) external returns (bytes memory)",
+  "function executeByRelayer(uint256 nonce,address target,bytes calldata data,bytes calldata message,bytes calldata bitcoinSig) external returns (bytes memory)",
   "function owner() view returns (address)",
   "function relayer() view returns (address)",
 ] as const;
 
-/** secp256k1 curve order (EIP-2: reject high S to prevent malleability). */
-const SECP256K1_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-
-/** Rootstock networks; name + chainId required by ethers Network.from(). */
 const ROOTSTOCK_TESTNET = { name: "rootstock-testnet", chainId: 31 };
 const ROOTSTOCK_MAINNET = { name: "rootstock", chainId: 30 };
 
+/** secp256k1 curve order (EIP-2: reject high-S to prevent malleability). */
+const SECP256K1_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
 export interface RelayParams {
-  message: string;   // hex (0x...)
-  signature: string;  // hex (0x...)
+  message: string;
+  signature: string;
   nonce: number | string;
   chainId: number | string;
   smartAccount: string;
   target: string;
-  data: string;      // hex (0x...)
+  data: string;
 }
 
-/**
- * Normalize signature to lower-S form. Bitcoin/Unisat may produce high-S signatures;
- * OpenZeppelin ECDSA rejects them (ECDSAInvalidSignatureS). Convert to lower-S so the contract accepts.
- */
+function networkForChainId(chainId: bigint) {
+  if (chainId === 31n) return ROOTSTOCK_TESTNET;
+  if (chainId === 30n) return ROOTSTOCK_MAINNET;
+  throw new Error(`Unsupported chainId ${chainId}; expected 31 (RSK testnet) or 30 (RSK mainnet)`);
+}
+
 function normalizeSignature(sigHex: string): string {
   const bytes = ethers.getBytes(sigHex);
   if (bytes.length !== 65) return sigHex;
@@ -47,7 +48,6 @@ function normalizeSignature(sigHex: string): string {
   return ethers.hexlify(ethers.concat([r, sNew, new Uint8Array([v])]));
 }
 
-/** Decode Unisat base64 signature to r, s, recoveryId. */
 function decodeUnisatSignature(base64Sig: string): { r: string; s: string; recoveryId: number } {
   const buf = Buffer.from(base64Sig, "base64");
   if (buf.length !== 65) throw new Error("Unisat signature must be 65 bytes");
@@ -57,8 +57,7 @@ function decodeUnisatSignature(base64Sig: string): { r: string; s: string; recov
   return { r, s, recoveryId };
 }
 
-/** Recover Ethereum address from Bitcoin-style signed message. Tries both v values and multiple message formats; returns only if one matches expectedOwner. */
-function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: string, expectedOwner: string): string {
+function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: string, expectedOwner: string): void {
   const { r, s, recoveryId } = decodeUnisatSignature(signatureBase64);
   const v1 = 27 + (recoveryId & 1);
   const v2 = 28 - (recoveryId & 1);
@@ -75,32 +74,41 @@ function recoverAddressFromBitcoinSig(messageStr: string, signatureBase64: strin
       try {
         const sig = ethers.Signature.from({ r, s, v });
         const addr = ethers.recoverAddress(hashHex, sig);
-        if (addr.toLowerCase() === expectedOwner.toLowerCase()) return addr;
+        if (addr.toLowerCase() === expectedOwner.toLowerCase()) return;
       } catch {
         continue;
       }
     }
   }
 
-  throw new Error("Unisat signature verification failed: recovered address did not match owner. Ensure you signed with the same Unisat key used to derive the SmartAccount owner.");
+  throw new Error("Unisat signature verification failed: recovered address did not match owner.");
 }
 
-/**
- * Builds and sends a transaction. Tries verifyAndExecute (Ethereum-style) first;
- * if that fails with InvalidSignature, verifies the Unisat (Bitcoin) signature off-chain
- * and calls executeByRelayer if the contract has a relayer set.
- */
-export async function relayTransaction(params: RelayParams): Promise<{ txHash: string }> {
-  const isTestnet = config.rootstockRpcUrl.includes("testnet");
-  const network = isTestnet ? ROOTSTOCK_TESTNET : ROOTSTOCK_MAINNET;
-  const provider = new ethers.JsonRpcProvider(config.rootstockRpcUrl, network, { staticNetwork: true });
-  const wallet = new ethers.Wallet(config.relayerPrivateKey, provider);
+/** 65-byte Unisat layout as hex for contract executeByRelayer. */
+function bitcoinSig65Hex(signatureHex: string, originalSignature: string): string {
+  const fromHex = ethers.getBytes(signatureHex);
+  if (fromHex.length === 65) return signatureHex;
+  const raw = originalSignature.trim();
+  if (raw.startsWith("0x")) throw new Error("Signature must be 65-byte Unisat (base64) or 65-byte hex");
+  const buf = Buffer.from(raw, "base64");
+  if (buf.length !== 65) throw new Error("Unisat signature must be 65 bytes (base64)");
+  return ethers.hexlify(buf);
+}
 
+export async function relayTransaction(params: RelayParams): Promise<{ txHash: string }> {
+  const nonceBigInt = typeof params.nonce === "string" ? BigInt(params.nonce) : BigInt(params.nonce);
+  const chainIdBigInt = typeof params.chainId === "string" ? BigInt(params.chainId) : BigInt(params.chainId);
+  const network = networkForChainId(chainIdBigInt);
+  const provider = new ethers.JsonRpcProvider(config.rootstockRpcUrl, network, { staticNetwork: true });
+  const net = await provider.getNetwork();
+  if (BigInt(net.chainId) !== chainIdBigInt) {
+    throw new Error(`chainId mismatch: request ${chainIdBigInt} vs RPC network ${net.chainId}`);
+  }
+
+  const wallet = new ethers.Wallet(config.relayerPrivateKey, provider);
   const smartAccount = new ethers.Contract(params.smartAccount, SMART_ACCOUNT_ABI, wallet);
   const messageBytes = ethers.getBytes(params.message);
   const dataBytes = ethers.getBytes(params.data);
-  const nonceBigInt = typeof params.nonce === "string" ? BigInt(params.nonce) : BigInt(params.nonce);
-  const chainIdBigInt = typeof params.chainId === "string" ? BigInt(params.chainId) : BigInt(params.chainId);
 
   const signatureHex = params.signature.startsWith("0x")
     ? params.signature
@@ -122,7 +130,9 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
       dataBytes
     );
     const receipt = await tx.wait();
-    const txHash = (receipt as { hash?: string; transactionHash?: string } | null)?.hash ?? (receipt as { transactionHash?: string } | null)?.transactionHash;
+    const txHash =
+      (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
+      (receipt as { transactionHash?: string } | null)?.transactionHash;
     if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
     return { txHash };
   } catch (err: unknown) {
@@ -152,21 +162,19 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
     );
     const messageSignedByUnisat = payloadHash.startsWith("0x") ? payloadHash : "0x" + payloadHash;
 
-    const sigBase64 =
-      params.signature.startsWith("0x")
-        ? Buffer.from(ethers.getBytes(params.signature)).toString("base64")
-        : params.signature;
-    let recovered: string;
-    try {
-      recovered = recoverAddressFromBitcoinSig(messageSignedByUnisat, sigBase64, owner);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(msg.includes("did not match") ? msg : "Unisat signature verification failed. Ensure you signed the payload with Unisat (Bitcoin-style).");
-    }
+    const sigBase64 = params.signature.startsWith("0x")
+      ? Buffer.from(ethers.getBytes(params.signature)).toString("base64")
+      : params.signature;
+    recoverAddressFromBitcoinSig(messageSignedByUnisat, sigBase64, owner);
 
-    const tx = await smartAccount.executeByRelayer(nonceBigInt, params.target, dataBytes);
+    const bitcoinSigHex = bitcoinSig65Hex(signatureHex, params.signature);
+    const bitcoinSigBytes = ethers.getBytes(bitcoinSigHex);
+
+    const tx = await smartAccount.executeByRelayer(nonceBigInt, params.target, dataBytes, messageBytes, bitcoinSigBytes);
     const receipt = await tx.wait();
-    const txHash = (receipt as { hash?: string; transactionHash?: string } | null)?.hash ?? (receipt as { transactionHash?: string } | null)?.transactionHash;
+    const txHash =
+      (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
+      (receipt as { transactionHash?: string } | null)?.transactionHash;
     if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
     return { txHash };
   }

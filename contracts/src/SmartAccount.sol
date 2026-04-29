@@ -1,35 +1,28 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
+import {BitcoinMessage} from "./BitcoinMessage.sol";
 
 /**
  * @title SmartAccount
  * @notice Minimal AA-style smart account controlled by a Bitcoin secp256k1 key.
- *         It verifies an ECDSA signature over a message, nonce and call data,
- *         protects against replay with a monotonically increasing nonce,
- *         and performs a call to a target contract if verification succeeds.
- *
- * @dev Supports two entry points:
- *      - verifyAndExecute: Ethereum personal_sign style (hash prefixed with \\x19Ethereum Signed Message).
- *      - executeByRelayer: Relayer-only; use when the user signs with Bitcoin-style (e.g. Unisat).
- *        The relayer must verify the Bitcoin signature off-chain and only call this when it matches owner.
+ * @dev verifyAndExecute: Ethereum personal_sign. executeByRelayer: Unisat Bitcoin-message signature verified on-chain.
  */
 contract SmartAccount {
     using MessageHashUtils for bytes32;
 
-    /// @notice Address that corresponds to the owner's Bitcoin public key.
     address public immutable owner;
-
-    /// @notice Relayer allowed to call executeByRelayer (optional; 0 = disabled).
     address public immutable relayer;
-
-    /// @notice Nonce used to prevent replay of signed messages.
     uint256 public nonce;
+
+    uint256 private constant SECP256K1_N =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
     event Executed(
         address indexed owner,
+        address indexed recoveredSigner,
         address indexed target,
         uint256 nonce,
         bytes data,
@@ -39,6 +32,7 @@ contract SmartAccount {
     error OwnerZero();
     error NotRelayer();
     error InvalidSignature();
+    error InvalidBitcoinSignature();
     error InvalidNonce(uint256 expected, uint256 provided);
     error CallFailed(bytes returndata);
 
@@ -48,14 +42,23 @@ contract SmartAccount {
         relayer = _relayer;
     }
 
-    /**
-     * @notice Verifies a signature from the owner and executes a call.
-     * @param message Arbitrary message payload (e.g. domain / session info).
-     * @param signature ECDSA signature produced by the owner's key.
-     * @param _nonce Expected nonce, must match the current `nonce` value.
-     * @param target Contract to be called on successful verification.
-     * @param data Calldata to send to the target contract.
-     */
+    function _payloadHash(uint256 _nonce, address target, bytes calldata data, bytes calldata message)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encodePacked(
+                address(this),
+                block.chainid,
+                _nonce,
+                target,
+                data,
+                keccak256(message)
+            )
+        );
+    }
+
     function verifyAndExecute(
         bytes calldata message,
         bytes calldata signature,
@@ -67,20 +70,7 @@ contract SmartAccount {
             revert InvalidNonce(nonce, _nonce);
         }
 
-        // Build the signed payload hash. Off-chain code must sign this exact
-        // preimage (or the equivalent Bitcoin message with this hash embedded).
-        bytes32 payloadHash = keccak256(
-            abi.encodePacked(
-                address(this),
-                block.chainid,
-                _nonce,
-                target,
-                data,
-                keccak256(message)
-            )
-        );
-
-        // Use Ethereum-style signed message prefix for additional protection.
+        bytes32 payloadHash = _payloadHash(_nonce, target, data, message);
         bytes32 ethSignedHash = payloadHash.toEthSignedMessageHash();
 
         address recovered = ECDSA.recoverCalldata(ethSignedHash, signature);
@@ -88,7 +78,6 @@ contract SmartAccount {
             revert InvalidSignature();
         }
 
-        // Bump nonce first to prevent reentrancy-based replay.
         nonce = _nonce + 1;
 
         (bool success, bytes memory result) = target.call(data);
@@ -96,31 +85,84 @@ contract SmartAccount {
             revert CallFailed(result);
         }
 
-        emit Executed(owner, target, _nonce, data, result);
+        emit Executed(owner, recovered, target, _nonce, data, result);
         return result;
     }
 
     /**
-     * @notice Execute a call via the trusted relayer (for Bitcoin-style signers e.g. Unisat).
-     * @dev Only callable by the relayer. The relayer must verify the user's Bitcoin signature
-     *      off-chain and confirm the signer matches owner before calling.
+     * @param bitcoinSig 65 bytes: Unisat layout — byte0 recovery id (ignored for v; we brute v 27/28), bytes 1–32 r, 33–64 s.
      */
     function executeByRelayer(
         uint256 _nonce,
         address target,
-        bytes calldata data
+        bytes calldata data,
+        bytes calldata message,
+        bytes calldata bitcoinSig
     ) external returns (bytes memory) {
         if (relayer == address(0) || msg.sender != relayer) revert NotRelayer();
         if (_nonce != nonce) {
             revert InvalidNonce(nonce, _nonce);
         }
+        if (bitcoinSig.length != 65) revert InvalidBitcoinSignature();
+
+        address recovered = _recoverBitcoinOwner(owner, _nonce, target, data, message, bitcoinSig);
+        if (recovered != owner) revert InvalidBitcoinSignature();
+
         nonce = _nonce + 1;
+
         (bool success, bytes memory result) = target.call(data);
         if (!success) {
             revert CallFailed(result);
         }
-        emit Executed(owner, target, _nonce, data, result);
+
+        emit Executed(owner, recovered, target, _nonce, data, result);
         return result;
+    }
+
+    function _recoverBitcoinOwner(
+        address expectedOwner,
+        uint256 _nonce,
+        address target,
+        bytes calldata data,
+        bytes calldata message,
+        bytes calldata bitcoinSig
+    ) internal view returns (address) {
+        bytes32 payloadHash = _payloadHash(_nonce, target, data, message);
+        bytes memory utf8Hex = BitcoinMessage.payloadHashToSignableUtf8(payloadHash);
+        bytes32 dVarint = BitcoinMessage.bitcoinSignedDigest(utf8Hex);
+        bytes32 dNoVar = BitcoinMessage.bitcoinSignedDigestNoVarint(utf8Hex);
+
+        (bytes32 r, bytes32 sNorm) = _readLowS(bitcoinSig);
+
+        address recovered = _tryRecoverOwner(expectedOwner, dVarint, r, sNorm);
+        if (recovered != address(0)) return recovered;
+        return _tryRecoverOwner(expectedOwner, dNoVar, r, sNorm);
+    }
+
+    function _readLowS(bytes calldata bitcoinSig) internal pure returns (bytes32 r, bytes32 sNorm) {
+        bytes32 sRaw;
+        assembly ("memory-safe") {
+            let base := bitcoinSig.offset
+            r := calldataload(add(base, 1))
+            sRaw := calldataload(add(base, 33))
+        }
+        uint256 sVal = uint256(sRaw);
+        sNorm = sRaw;
+        if (sVal > SECP256K1_N / 2) {
+            sNorm = bytes32(SECP256K1_N - sVal);
+        }
+    }
+
+    function _tryRecoverOwner(address expectedOwner, bytes32 digest, bytes32 r, bytes32 sNorm)
+        private
+        pure
+        returns (address)
+    {
+        (address a27, ECDSA.RecoverError e27,) = ECDSA.tryRecover(digest, 27, r, sNorm);
+        if (e27 == ECDSA.RecoverError.NoError && a27 == expectedOwner) return a27;
+        (address a28, ECDSA.RecoverError e28,) = ECDSA.tryRecover(digest, 28, r, sNorm);
+        if (e28 == ECDSA.RecoverError.NoError && a28 == expectedOwner) return a28;
+        return address(0);
     }
 }
 

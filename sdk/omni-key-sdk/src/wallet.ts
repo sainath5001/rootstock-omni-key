@@ -34,6 +34,18 @@ export async function connectWallet(): Promise<string> {
 }
 
 /**
+ * Disconnects from Unisat when the provider exposes `disconnect()`.
+ * If the method is missing, this is a no-op (clear UI state in the app instead).
+ */
+export async function disconnectWallet(): Promise<void> {
+  if (!detectUnisat()) return;
+  const unisat = getUnisat();
+  if (typeof unisat.disconnect === "function") {
+    await unisat.disconnect();
+  }
+}
+
+/**
  * Gets the current Bitcoin address from Unisat (no prompt).
  * Returns the first account or throws if not connected.
  */

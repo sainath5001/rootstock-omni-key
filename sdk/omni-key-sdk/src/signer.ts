@@ -2,9 +2,9 @@ import { ethers } from "ethers";
 import type { RelayPayload, RelayResponse } from "./types";
 
 /**
- * Builds the payload hash that SmartAccount.verifyAndExecute expects.
- * Must match: keccak256(abi.encodePacked(smartAccount, nonce, target, data, keccak256(message))).
- * The user signs the Ethereum signed message hash of this (personal_sign).
+ * Builds the payload hash that SmartAccount.verifyAndExecute / executeByRelayer bind to.
+ * Must match on-chain: keccak256(abi.encodePacked(smartAccount, chainId, nonce, target, data, keccak256(message))).
+ * The user signs the Ethereum signed message hash of this for verifyAndExecute (personal_sign).
  */
 export function buildPayloadHash(
   smartAccount: string,
@@ -26,8 +26,7 @@ export function buildPayloadHash(
 }
 
 /**
- * Returns the hex string to be passed to personal_sign / signMessage.
- * This is the 32-byte payload hash; the wallet will prefix with "\x19Ethereum Signed Message:\n32" and sign.
+ * Returns the 32-byte hash that Unisat signs (Bitcoin message over this hex string) and that verifyAndExecute uses with Ethereum personal_sign.
  */
 export function getMessageToSign(
   smartAccount: string,
@@ -40,10 +39,6 @@ export function getMessageToSign(
   return buildPayloadHash(smartAccount, chainId, nonce, target, data, messageHex);
 }
 
-/**
- * Requests the Unisat wallet to sign a message (personal_sign style).
- * Pass the payload hash hex; Unisat will add the Ethereum prefix and return the signature.
- */
 export async function signMessage(messageHex: string): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("signMessage is only available in the browser");
@@ -52,8 +47,19 @@ export async function signMessage(messageHex: string): Promise<string> {
   if (!unisat?.signMessage) {
     throw new Error("Unisat wallet not found or signMessage not supported");
   }
-  const signature = await unisat.signMessage(messageHex);
-  return signature;
+  return unisat.signMessage(messageHex);
+}
+
+function assertHttpRelayerUrl(url: string): void {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new Error("relayerUrl must be an absolute http(s) URL");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error("relayerUrl must use http: or https:");
+  }
 }
 
 /**
@@ -63,10 +69,15 @@ export async function relayTransaction(
   relayerUrl: string,
   payload: RelayPayload
 ): Promise<string> {
+  assertHttpRelayerUrl(relayerUrl);
   const url = relayerUrl.replace(/\/$/, "") + "/relay";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (payload.relayerApiKey) {
+    headers["X-Relayer-API-Key"] = payload.relayerApiKey;
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       message: payload.message,
       signature: payload.signature,

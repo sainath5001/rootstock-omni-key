@@ -9,6 +9,8 @@ export interface UnisatProvider {
   getPublicKey?: () => Promise<string>;
   signMessage(message: string): Promise<string>;
   switchNetwork?(network: string): Promise<void>;
+  /** Clears the in-extension session when supported (Unisat). */
+  disconnect?: () => Promise<void> | void;
 }
 
 declare global {
@@ -25,6 +27,8 @@ export interface OmniKeyClientConfig {
   relayerUrl: string;
   /** SmartAccount contract address (optional if passed per call). */
   smartAccountAddress?: string;
+  /** Optional API key sent as X-Relayer-API-Key when RELAYER_API_KEY is set on the server. */
+  relayerApiKey?: string;
 }
 
 /**
@@ -57,6 +61,8 @@ export interface RelayPayload {
   smartAccount: string;
   target: string;
   data: string;
+  /** Sent as X-Relayer-API-Key if set. */
+  relayerApiKey?: string;
 }
 
 /**

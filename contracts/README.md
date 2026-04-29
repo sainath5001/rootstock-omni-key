@@ -6,7 +6,7 @@ Smart contracts for **Rootstock Omni-Key**: a minimal account-abstraction style 
 
 | Contract        | Description |
 |----------------|-------------|
-| **SmartAccount** | Account contract controlled by an owner address (derived from a Bitcoin/secp256k1 key). Accepts meta-transactions via `verifyAndExecute` (Ethereum-style signature) or `executeByRelayer` (after relayer verifies Unisat/Bitcoin signature off-chain). Uses a nonce for replay protection. |
+| **SmartAccount** | Account contract controlled by an owner address (derived from a Bitcoin/secp256k1 key). `verifyAndExecute` uses Ethereum `personal_sign`. `executeByRelayer` accepts the Unisat 65-byte Bitcoin-message signature and **verifies it on-chain** (relayer only pays gas). Uses a nonce for replay protection. |
 | **Counter**      | Simple demo contract with `increment()` and a `counter` value. Used by the demo app to show end-to-end flow. |
 
 ## Prerequisites
@@ -37,6 +37,10 @@ Smart contracts for **Rootstock Omni-Key**: a minimal account-abstraction style 
 ```bash
 forge build
 ```
+
+### EVM version (Rootstock)
+
+Foundry is configured with `evm_version = "cancun"` and `via_ir = true` so the project compiles cleanly with OpenZeppelin v5 (transitive code may reference Cancun-only builtins). **Rootstock nodes follow a Paris-era execution rule set**; the contracts in this repo (`SmartAccount`, `Counter`, `BitcoinMessage`) avoid Cancun-only opcodes in their own bytecode. Still run a **dry-run deployment** against your target Rootstock RPC before production, and review bytecode if you add new dependencies.
 
 ## Test
 

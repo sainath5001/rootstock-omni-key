@@ -1,9 +1,32 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { relayTransaction, RelayParams } from "../services/relayerService";
 import { config } from "../config";
 import { ethers } from "ethers";
 
 const router = Router();
+
+const SMART_ACCOUNT_IFACE = new ethers.Interface([
+  "error InvalidSignature()",
+  "error InvalidNonce(uint256,uint256)",
+]);
+const INVALID_SIGNATURE_SELECTOR = SMART_ACCOUNT_IFACE.getError("InvalidSignature")!.selector;
+const INVALID_NONCE_SELECTOR = SMART_ACCOUNT_IFACE.getError("InvalidNonce")!.selector;
+
+function requireRelayApiKey(req: Request, res: Response, next: NextFunction): void {
+  if (!config.relayerApiKey) {
+    next();
+    return;
+  }
+  const header = req.get("x-relayer-api-key") ?? req.get("X-Relayer-API-Key");
+  const auth = req.get("authorization");
+  const bearer = auth?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const key = header ?? bearer;
+  if (!key || key !== config.relayerApiKey) {
+    res.status(401).json({ error: "Unauthorized: invalid or missing relayer API key" });
+    return;
+  }
+  next();
+}
 
 function isHex(s: string): boolean {
   if (!s || typeof s !== "string") return false;
@@ -64,7 +87,7 @@ function parseChainId(v: unknown): number | string {
  * Body: { message, signature, nonce, chainId, smartAccount?, target, data }
  * smartAccount is optional if SMART_ACCOUNT_ADDRESS is set in env.
  */
-router.post("/relay", async (req: Request, res: Response): Promise<void> => {
+router.post("/relay", requireRelayApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
     if (!body || typeof body !== "object") {
@@ -170,9 +193,20 @@ router.post("/relay", async (req: Request, res: Response): Promise<void> => {
     const errors = err && typeof err === "object" && "errors" in err ? (err as { errors?: unknown[] }).errors : [];
     const subMsg = Array.isArray(errors) && errors.length > 0 && errors[0] instanceof Error ? (errors[0] as Error).message : "";
     const full = message || code || subMsg || (err && typeof err === "object" ? JSON.stringify(err) : "Relayer failed");
-    const isRevert = full.includes("revert") || full.includes("InvalidSignature") || full.includes("InvalidNonce") || full.includes("CallFailed");
-    const isInvalidSig = revertData === "0x8baa579f" || full.includes("InvalidSignature");
-    const isInvalidNonce = revertData === "0x06427aeb" || full.includes("InvalidNonce");
+    const isRevert =
+      full.includes("revert") ||
+      full.includes("InvalidSignature") ||
+      full.includes("InvalidNonce") ||
+      full.includes("CallFailed") ||
+      full.includes("InvalidBitcoinSignature");
+    const isInvalidSig =
+      revertData === INVALID_SIGNATURE_SELECTOR ||
+      revertData.startsWith(INVALID_SIGNATURE_SELECTOR) ||
+      full.includes("InvalidSignature");
+    const isInvalidNonce =
+      revertData === INVALID_NONCE_SELECTOR ||
+      revertData.startsWith(INVALID_NONCE_SELECTOR) ||
+      full.includes("InvalidNonce");
     const isRpc =
       full.includes("detect network") || full.includes("ECONNREFUSED") || full.includes("ENOTFOUND") ||
       full.includes("fetch") || full.includes("NETWORK_ERROR") || full.includes("ETIMEDOUT") || full.includes("ENETUNREACH") ||
