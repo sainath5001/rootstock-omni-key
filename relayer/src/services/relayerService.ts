@@ -28,6 +28,24 @@ export interface RelayParams {
   data: string;
 }
 
+function isTransientRpcError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("ENETUNREACH") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ENOTFOUND") ||
+    msg.includes("NETWORK_ERROR") ||
+    msg.includes("detect network") ||
+    msg.includes("fetch failed")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function networkForChainId(chainId: bigint) {
   if (chainId === 31n) return ROOTSTOCK_TESTNET;
   if (chainId === 30n) return ROOTSTOCK_MAINNET;
@@ -101,14 +119,6 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
   const nonceBigInt = typeof params.nonce === "string" ? BigInt(params.nonce) : BigInt(params.nonce);
   const chainIdBigInt = typeof params.chainId === "string" ? BigInt(params.chainId) : BigInt(params.chainId);
   const network = networkForChainId(chainIdBigInt);
-  const provider = new ethers.JsonRpcProvider(config.rootstockRpcUrl, network, { staticNetwork: true });
-  const net = await provider.getNetwork();
-  if (BigInt(net.chainId) !== chainIdBigInt) {
-    throw new Error(`chainId mismatch: request ${chainIdBigInt} vs RPC network ${net.chainId}`);
-  }
-
-  const wallet = new ethers.Wallet(config.relayerPrivateKey, provider);
-  const smartAccount = new ethers.Contract(params.smartAccount, SMART_ACCOUNT_ABI, wallet);
   const messageBytes = ethers.getBytes(params.message);
   const dataBytes = ethers.getBytes(params.data);
 
@@ -122,64 +132,84 @@ export async function relayTransaction(params: RelayParams): Promise<{ txHash: s
         }
       })();
 
-  try {
-    const signatureBytes = ethers.getBytes(normalizeSignature(signatureHex));
-    const tx = await smartAccount.verifyAndExecute(
-      messageBytes,
-      signatureBytes,
-      nonceBigInt,
-      params.target,
-      dataBytes
-    );
-    const receipt = await tx.wait();
-    const txHash =
-      (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
-      (receipt as { transactionHash?: string } | null)?.transactionHash;
-    if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
-    return { txHash };
-  } catch (err: unknown) {
-    const errData = err && typeof err === "object" && "info" in err ? (err as { info?: { error?: { data?: string } } }).info?.error?.data : undefined;
-    const dataStr = typeof errData === "string" ? errData : "";
-    const isInvalidSigSelector =
-      dataStr === INVALID_SIGNATURE_SELECTOR ||
-      dataStr.startsWith(INVALID_SIGNATURE_SELECTOR) ||
-      (err instanceof Error && err.message.includes("InvalidSignature"));
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= config.rpcMaxRetries; attempt++) {
+    try {
+      const provider = new ethers.JsonRpcProvider(config.rootstockRpcUrl, network, { staticNetwork: true });
+      const net = await provider.getNetwork();
+      if (BigInt(net.chainId) !== chainIdBigInt) {
+        throw new Error(`chainId mismatch: request ${chainIdBigInt} vs RPC network ${net.chainId}`);
+      }
 
-    if (!isInvalidSigSelector) throw err;
+      const wallet = new ethers.Wallet(config.relayerPrivateKey, provider);
+      const smartAccount = new ethers.Contract(params.smartAccount, SMART_ACCOUNT_ABI, wallet);
+      try {
+        const signatureBytes = ethers.getBytes(normalizeSignature(signatureHex));
+        const tx = await smartAccount.verifyAndExecute(
+          messageBytes,
+          signatureBytes,
+          nonceBigInt,
+          params.target,
+          dataBytes
+        );
+        const receipt = await tx.wait();
+        const txHash =
+          (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
+          (receipt as { transactionHash?: string } | null)?.transactionHash;
+        if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
+        return { txHash };
+      } catch (err: unknown) {
+        const errData = err && typeof err === "object" && "info" in err
+          ? (err as { info?: { error?: { data?: string } } }).info?.error?.data
+          : undefined;
+        const dataStr = typeof errData === "string" ? errData : "";
+        const isInvalidSigSelector =
+          dataStr === INVALID_SIGNATURE_SELECTOR ||
+          dataStr.startsWith(INVALID_SIGNATURE_SELECTOR) ||
+          (err instanceof Error && err.message.includes("InvalidSignature"));
 
-    const relayerAddr = await smartAccount.relayer();
-    if (relayerAddr === ethers.ZeroAddress) {
-      throw new Error(
-        "Invalid signature (Ethereum-style). Contract has no relayer set for Unisat. Redeploy with RELAYER_ADDRESS in contracts/.env."
-      );
+        if (!isInvalidSigSelector) throw err;
+
+        const relayerAddr = await smartAccount.relayer();
+        if (relayerAddr === ethers.ZeroAddress) {
+          throw new Error(
+            "Invalid signature (Ethereum-style). Contract has no relayer set for Unisat. Redeploy with RELAYER_ADDRESS in contracts/.env."
+          );
+        }
+
+        const owner = await smartAccount.owner();
+        const payloadHash = buildPayloadHash(
+          params.smartAccount,
+          chainIdBigInt,
+          nonceBigInt,
+          params.target,
+          params.data,
+          params.message
+        );
+        const messageSignedByUnisat = payloadHash.startsWith("0x") ? payloadHash : "0x" + payloadHash;
+        const sigBase64 = params.signature.startsWith("0x")
+          ? Buffer.from(ethers.getBytes(params.signature)).toString("base64")
+          : params.signature;
+        recoverAddressFromBitcoinSig(messageSignedByUnisat, sigBase64, owner);
+
+        const bitcoinSigHex = bitcoinSig65Hex(signatureHex, params.signature);
+        const bitcoinSigBytes = ethers.getBytes(bitcoinSigHex);
+        const tx = await smartAccount.executeByRelayer(nonceBigInt, params.target, dataBytes, messageBytes, bitcoinSigBytes);
+        const receipt = await tx.wait();
+        const txHash =
+          (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
+          (receipt as { transactionHash?: string } | null)?.transactionHash;
+        if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
+        return { txHash };
+      }
+    } catch (err) {
+      lastErr = err;
+      if (attempt < config.rpcMaxRetries && isTransientRpcError(err)) {
+        await sleep(config.rpcRetryDelayMs);
+        continue;
+      }
+      throw err;
     }
-
-    const owner = await smartAccount.owner();
-
-    const payloadHash = buildPayloadHash(
-      params.smartAccount,
-      chainIdBigInt,
-      nonceBigInt,
-      params.target,
-      params.data,
-      params.message
-    );
-    const messageSignedByUnisat = payloadHash.startsWith("0x") ? payloadHash : "0x" + payloadHash;
-
-    const sigBase64 = params.signature.startsWith("0x")
-      ? Buffer.from(ethers.getBytes(params.signature)).toString("base64")
-      : params.signature;
-    recoverAddressFromBitcoinSig(messageSignedByUnisat, sigBase64, owner);
-
-    const bitcoinSigHex = bitcoinSig65Hex(signatureHex, params.signature);
-    const bitcoinSigBytes = ethers.getBytes(bitcoinSigHex);
-
-    const tx = await smartAccount.executeByRelayer(nonceBigInt, params.target, dataBytes, messageBytes, bitcoinSigBytes);
-    const receipt = await tx.wait();
-    const txHash =
-      (receipt as { hash?: string; transactionHash?: string } | null)?.hash ??
-      (receipt as { transactionHash?: string } | null)?.transactionHash;
-    if (!txHash) throw new Error("Transaction sent but no transaction hash in receipt");
-    return { txHash };
   }
+  throw lastErr instanceof Error ? lastErr : new Error("RPC request failed");
 }

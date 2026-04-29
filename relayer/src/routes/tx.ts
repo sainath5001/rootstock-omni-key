@@ -236,7 +236,7 @@ router.post("/relay", requireRelayApiKey, async (req: Request, res: Response): P
       code === "ETIMEDOUT" || code === "ENETUNREACH" || (typeof message === "string" && (message.includes("ETIMEDOUT") || message.includes("ENETUNREACH")));
     let errorMsg: string;
     if (isRpc)
-      errorMsg = "Rootstock RPC error. Your RPC must support standard EVM JSON-RPC methods (e.g. eth_getTransactionCount). Set ROOTSTOCK_RPC_URL in relayer/.env to https://public-node.testnet.rsk.co (testnet) or https://public-node.rsk.co (mainnet).";
+      errorMsg = "Rootstock RPC unreachable or timed out. Check internet/VPN/firewall, keep NODE_OPTIONS=--dns-result-order=ipv4first, and verify ROOTSTOCK_RPC_URL in relayer/.env.";
     else if (isInvalidSig)
       errorMsg = "Invalid signature: the signer does not match the Smart Account owner. Deploy the SmartAccount with the Ethereum address derived from your Unisat (Bitcoin) public key. See repo README.";
     else if (isInvalidNonce)

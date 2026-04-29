@@ -52,4 +52,8 @@ export const config = {
   accountRateLimitMax: parsePositiveInt("ACCOUNT_RATE_LIMIT_MAX", "20"),
   /** If set, POST /relay requires header X-Relayer-API-Key (or Authorization: Bearer …). */
   relayerApiKey: getEnv("RELAYER_API_KEY", ""),
+  /** RPC retry attempts for transient network errors (timeouts, unreachable). */
+  rpcMaxRetries: parsePositiveInt("RPC_MAX_RETRIES", "3"),
+  /** Delay between RPC retry attempts in milliseconds. */
+  rpcRetryDelayMs: parsePositiveInt("RPC_RETRY_DELAY_MS", "1000"),
 };
